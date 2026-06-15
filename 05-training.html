@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>05 옵티마이저 · 과적합 · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 1 · FOUNDATION</div>
+    <h1>학습 잘 시키기 — 옵티마이저와 과적합</h1>
+    <p class="intro">경사하강법(ch02)은 "내리막으로 한 발씩"이었죠. 그런데 진짜 손실 지형은 <b>울퉁불퉁</b>해서 잘못 내려가면 <b>지역 최솟값</b>에 갇히고, 너무 열심히 외우면 <b>과적합</b>이 됩니다. 모멘텀·Adam이 어떻게 골짜기를 탈출하는지, 그리고 드롭아웃·조기종료가 어떻게 "외우기"를 막는지 직접 굴려 봅시다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 울퉁불퉁한 지형</button>
+    <button data-s="1">01 · 모멘텀과 Adam</button>
+    <button data-s="2">02 · 과적합</button>
+    <button data-s="3">03 · 드롭아웃·조기종료</button>
+  </nav>
+
+  <!-- STEP 0 : 비볼록 손실 지형 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Non-convex Loss</span>
+    <h2>울퉁불퉁한 손실 지형 — SGD가 갇히는 곳</h2>
+    <p class="lead">ch02의 손실은 매끈한 골짜기 하나(볼록)였지만, 진짜 신경망의 손실은 이렇게 <b>골짜기가 여러 개</b>예요. 공을 어디에 놓느냐에 따라 SGD는 <b>가장 가까운 골짜기</b>로만 굴러떨어집니다 — 그게 전역 최솟값이 아니어도요.</p>
+    <div class="ctrl">
+      <label>시작 위치 x₀</label>
+      <input type="range" id="s0x" min="-4" max="4.5" step="0.05" value="-3.5">
+      <span class="val" id="s0xv">-3.50</span>
+    </div>
+    <div class="ctrl" style="margin-top:6px">
+      <button class="btn" id="s0run">▶ SGD 실행</button>
+      <button class="btn" id="s0reset" style="border-color:var(--k);background:rgba(251,113,133,.12);color:var(--k)">↺ 리셋</button>
+      <span class="val" id="s0step" style="min-width:auto">step 0</span>
+      <span class="val" id="s0loss" style="color:var(--good)">L —</span>
+    </div>
+    <div class="chart-wrap"><div id="s0chart"></div></div>
+    <p class="note" style="margin-top:10px">→ 왼쪽 비탈(x₀ ≈ −3.5)에서 출발하면 <b style="color:var(--k)">지역 최솟값 x≈−0.88 (L≈1.75)</b> 에 갇혀요. 전역 최솟값 <b style="color:var(--good)">x≈1.52 (L≈0.86)</b> 가 바로 옆에 있는데도, SGD는 눈앞의 오르막을 넘을 힘이 없거든요. 시작 위치를 옮겨가며 <b>어느 골짜기로 떨어지는지</b> 확인해 보세요. 오른쪽 끝(x₀ &gt; 3)에서도 또 다른 지역 최솟값(x≈3.94)에 갇힙니다.</p>
+  </section>
+
+  <!-- STEP 1 : 모멘텀 vs Adam -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Momentum &amp; Adam</span>
+    <h2>같은 지형, 세 가지 굴리는 법</h2>
+    <p class="lead">같은 출발점(x₀ = −3.5)에서 셋을 동시에 굴려요. <b>모멘텀</b>은 내려오며 쌓은 <b>관성(속도 v)</b>으로 오르막을 넘고, <b>Adam</b>은 기울기 크기에 상관없이 <b>일정한 보폭</b>으로 꾸준히 전진해서, 둘 다 SGD가 갇힌 골짜기를 탈출합니다.</p>
+    <div class="grid3">
+      <div class="card" style="border-color:rgba(251,113,133,.4)">
+        <h4 style="color:var(--k)">SGD <span class="tagchip k">lr=0.04</span></h4>
+        <div class="formula" style="font-size:12px">x ← x − lr·g</div>
+        <p class="note" style="margin:8px 0 0">지금 발밑 기울기만 보고 한 발. 오르막을 못 넘어요.</p>
+      </div>
+      <div class="card" style="border-color:rgba(55,189,248,.4)">
+        <h4 style="color:var(--q)">모멘텀 <span class="tagchip q">lr=0.04, β=0.9</span></h4>
+        <div class="formula" style="font-size:12px">v ← βv − lr·g<br>x ← x + v</div>
+        <p class="note" style="margin:8px 0 0">속도 v를 누적 — 내리막에서 모은 관성으로 언덕을 넘어요.</p>
+      </div>
+      <div class="card" style="border-color:rgba(52,211,153,.4)">
+        <h4 style="color:var(--good)">Adam <span class="tagchip" style="background:rgba(52,211,153,.15);color:var(--good)">lr=0.2</span></h4>
+        <div class="formula" style="font-size:12px">m←β₁m+(1−β₁)g<br>v←β₂v+(1−β₂)g²<br>x ← x − lr·m̂/(√v̂+ε)</div>
+        <p class="note" style="margin:8px 0 0">g²의 이동평균의 <b>제곱근</b>(√v̂)으로 나눠 보폭을 정규화 — 어디서나 보폭 ≈ lr로 꾸준히.</p>
+      </div>
+    </div>
+    <div class="ctrl" style="margin-top:16px">
+      <button class="btn" id="s1run">▶ 동시에 굴리기</button>
+      <button class="btn" id="s1reset" style="border-color:var(--k);background:rgba(251,113,133,.12);color:var(--k)">↺ 리셋</button>
+      <span class="val" id="s1step" style="min-width:auto">step 0</span>
+    </div>
+    <div class="chart-wrap"><div id="s1chart"></div></div>
+    <div id="s1status" class="grid3" style="margin-top:12px"></div>
+    <p class="note" style="margin-top:10px">→ <b style="color:var(--k)">SGD</b>는 첫 골짜기(x≈−0.88)에서 끝. <b style="color:var(--q)">모멘텀</b>은 관성으로 그 언덕을 <b>그대로 통과</b>해 전역 최솟값(x≈1.52)까지 가요 — 도착해서도 잠깐 좌우로 출렁이는 게 관성의 증거예요. <b style="color:var(--good)">Adam</b>은 기울기가 작아지는 평평한 구간에서도 보폭이 줄지 않아 끝까지 도달합니다. 파이토치에선 <code class="mono">optim.SGD(..., momentum=0.9)</code>, <code class="mono">optim.Adam(...)</code> 한 줄 차이예요.</p>
+  </section>
+
+  <!-- STEP 2 : 과적합 -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — Overfitting</span>
+    <h2>과적합 — train만 잘 맞추는 모델</h2>
+    <p class="lead">사인 곡선에서 뽑은 <b style="color:var(--q)">train 점 10개</b>에 다항식을 최소제곱(정규방정식)으로 피팅해요. 차수를 올리면 train 오차는 <b>계속 줄지만</b>, 학습에 안 쓴 <b style="color:var(--k)">test 점 5개</b>의 오차는 어느 순간부터 <b>다시 치솟습니다</b>. 그게 과적합이에요.</p>
+    <div class="ctrl">
+      <label>다항식 차수 d</label>
+      <input type="range" id="s2deg" min="1" max="9" step="1" value="1">
+      <span class="val" id="s2degv">1</span>
+    </div>
+    <div class="chart-wrap"><div id="s2chart"></div></div>
+    <div style="margin-top:14px">
+      <div class="barrow"><div class="bw" style="font-size:13px;color:var(--q)">train MSE</div>
+        <div class="track"><div class="fill" id="s2trbar" style="background:linear-gradient(90deg,var(--q),#7dd3fc)"></div></div>
+        <div class="pct mono" id="s2trv">—</div></div>
+      <div class="barrow"><div class="bw" style="font-size:13px;color:var(--k)">test MSE</div>
+        <div class="track"><div class="fill" id="s2tebar" style="background:linear-gradient(90deg,var(--k),#fda4af)"></div></div>
+        <div class="pct mono" id="s2tev">—</div></div>
+    </div>
+    <div class="callout v" style="margin-top:14px">
+      <div class="ttl" id="s2verdict">—</div>
+      <p style="margin:0" id="s2desc">—</p>
+    </div>
+    <p class="note">→ 차수 9 = 점 10개를 <b>전부 통과</b>하는 곡선(train MSE ≈ 0). 하지만 점 사이에서 미친 듯이 꼬불거려서 test 오차가 폭발해요. 노이즈까지 <b>외워버린</b> 거죠. 좋은 모델은 train을 완벽히 맞추는 모델이 아니라 <b>처음 보는 데이터</b>를 잘 맞추는 모델입니다 (일반화).</p>
+  </section>
+
+  <!-- STEP 3 : 드롭아웃 · 조기종료 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — Dropout &amp; Early Stopping</span>
+    <h2>외우기를 막는 두 가지 장치</h2>
+    <p class="lead">과적합을 막는 대표 처방 두 가지예요. <b>드롭아웃</b>은 학습 때마다 뉴런 일부를 무작위로 꺼서 특정 뉴런 조합에 의존(공동적응)하지 못하게 하고, <b>조기종료</b>는 검증 손실이 가장 낮았던 지점의 가중치를 저장해 두고, 더 나아지지 않으면(patience) 거기서 멈춥니다.</p>
+
+    <div class="sub" style="margin-top:18px">(a) 드롭아웃 — 매 스텝 다른 부분 신경망으로 학습</div>
+    <div class="ctrl">
+      <button class="btn" id="s3drop">🎲 드롭 (p=0.5)</button>
+      <button class="btn" id="s3all" style="border-color:var(--good);background:rgba(52,211,153,.12);color:var(--good)">전부 켜기 (추론 모드)</button>
+      <span class="val" id="s3cnt" style="min-width:auto">hidden 10/10 활성</span>
+    </div>
+    <div class="chart-wrap"><div id="s3net"></div></div>
+    <p class="note" style="margin-top:8px">→ 버튼을 누를 때마다 <b>다른 부분집합</b>이 살아남아요. 매 스텝 팀원이 바뀌니 한 뉴런이 "쟤가 처리하겠지"라며 특정 동료에게 기대는 <b>공동적응</b>이 불가능해지고, 각자 혼자서도 쓸모 있는 특징을 배웁니다. 추론 때는 전부 켜요 — 사실상 수많은 부분 신경망의 <b>앙상블</b>이 되죠(실제 구현은 학습 시 출력을 1/(1−p)로 키워두는 <i>inverted dropout</i>이라 추론 땐 보정이 필요 없어요). 파이토치에선 <code class="mono">nn.Dropout(p=0.5)</code>.</p>
+
+    <div class="sub" style="margin-top:26px">(b) 조기종료 — val 손실이 꺾이는 지점에서 멈추기</div>
+    <div class="chart-wrap"><div id="s3curve"></div></div>
+    <div class="callout good" style="margin-top:12px">
+      <div class="ttl">조기종료 지점 = <span class="mono" id="s3best">—</span></div>
+      <p style="margin:0"><b style="color:var(--q)">train 손실</b>은 끝까지 내려가지만(외우는 중), <b style="color:var(--k)">val 손실</b>은 어느 순간부터 다시 올라가요 — 과적합이 시작된 거예요. 그래서 <b>val 손실 최저점의 가중치를 저장해 두고 거기서 멈춥니다</b>. "성적이 더 안 오르면 그만"이라는 가장 단순하고 강력한 규제예요.</p>
+    </div>
+  </section>
+
+  <p class="foot">// 모든 값은 브라우저에서 실제 계산. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '05 · Training');
+VZ.setupStepper();
+
+/* ============================================================
+   공통: 1D 비볼록 손실 지형 (큰 사발 + 사인 잔물결)
+   L(x) = 0.09(x−2.2)² + 0.38·sin(2.4x+1.2) + 1.2
+   최솟값: x≈−0.88(지역, L≈1.75) / x≈1.52(전역, L≈0.86) / x≈3.94(지역, L≈1.11)
+   ============================================================ */
+const LAND = {
+  f: function(x){ return 0.09*(x-2.2)*(x-2.2) + 0.38*Math.sin(2.4*x+1.2) + 1.2; },
+  g: function(x){ return 0.18*(x-2.2) + 0.912*Math.cos(2.4*x+1.2); },
+  xMin:-4.2, xMax:4.8, yMin:0, yMax:4.6,
+  minima:[ {x:-0.88, kind:'지역', color:'var(--k)'},
+           {x: 1.52, kind:'전역', color:'var(--good)'},
+           {x: 3.94, kind:'지역', color:'var(--k)'} ]
+};
+
+// 지형 + 공(들) + 자취 SVG
+function landSVG(balls){
+  const W=640, H=320, pad=42;
+  const sx=function(x){ return pad + (x-LAND.xMin)/(LAND.xMax-LAND.xMin)*(W-pad*1.4); };
+  const sy=function(y){ return H-pad - (y-LAND.yMin)/(LAND.yMax-LAND.yMin)*(H-pad*1.5); };
+  let g='';
+  for(let gx=-4; gx<=4; gx+=2){
+    g+='<line class="gridline" x1="'+sx(gx)+'" y1="'+(pad*0.4)+'" x2="'+sx(gx)+'" y2="'+(H-pad)+'"></line>';
+    g+='<text class="axislabel" x="'+sx(gx)+'" y="'+(H-pad+16)+'" text-anchor="middle">'+gx+'</text>';
+  }
+  for(let gy=0; gy<=4; gy++){
+    g+='<line class="gridline" x1="'+pad+'" y1="'+sy(gy)+'" x2="'+(W-pad*0.4)+'" y2="'+sy(gy)+'"></line>';
+    g+='<text class="axislabel" x="'+(pad-8)+'" y="'+(sy(gy)+3)+'" text-anchor="end">'+gy+'</text>';
+  }
+  g+='<line class="axis" x1="'+pad+'" y1="'+(pad*0.4)+'" x2="'+pad+'" y2="'+(H-pad)+'"></line>';
+  g+='<line class="axis" x1="'+pad+'" y1="'+(H-pad)+'" x2="'+(W-pad*0.4)+'" y2="'+(H-pad)+'"></line>';
+  g+='<text class="axislabel" x="'+(W-pad*0.4)+'" y="'+(H-pad+16)+'" text-anchor="end">x (파라미터)</text>';
+  g+='<text class="axislabel" x="'+(pad-8)+'" y="'+(pad*0.4-4)+'" text-anchor="end">L</text>';
+  // 최솟값 마커
+  for(const m of LAND.minima){
+    g+='<line x1="'+sx(m.x)+'" y1="'+sy(LAND.f(m.x))+'" x2="'+sx(m.x)+'" y2="'+(pad*0.55)+'" stroke="'+m.color+'" stroke-width="1" stroke-dasharray="3 4" opacity="0.5"></line>';
+    g+='<text class="axislabel" x="'+sx(m.x)+'" y="'+(pad*0.5)+'" text-anchor="middle" fill="'+m.color+'">'+m.kind+'</text>';
+  }
+  // 손실 곡선
+  let pts='';
+  for(let x=LAND.xMin; x<=LAND.xMax; x+=0.04) pts+=sx(x)+','+sy(LAND.f(x))+' ';
+  g+='<polyline points="'+pts+'" fill="none" stroke="var(--slate)" stroke-width="2.5" opacity="0.9"></polyline>';
+  // 자취 + 공
+  for(const b of balls){
+    for(const tx of b.trail)
+      g+='<circle cx="'+sx(tx)+'" cy="'+sy(LAND.f(tx))+'" r="2.4" fill="'+b.color+'" opacity="0.3"></circle>';
+    g+='<circle cx="'+sx(b.x)+'" cy="'+sy(LAND.f(b.x))+'" r="7" fill="'+b.color+'" stroke="#04121f" stroke-width="2"></circle>';
+    if(b.label) g+='<text class="axislabel" x="'+sx(b.x)+'" y="'+(sy(LAND.f(b.x))-12)+'" text-anchor="middle" fill="'+b.color+'" font-weight="700">'+b.label+'</text>';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-width:'+W+'px">'+g+'</svg>';
+}
+
+// ---------- STEP 0 : SGD가 갇히는 시연 ----------
+(function(){
+  const sx=document.getElementById('s0x'), xv=document.getElementById('s0xv');
+  const chart=document.getElementById('s0chart');
+  const stepEl=document.getElementById('s0step'), lossEl=document.getElementById('s0loss');
+  const runBtn=document.getElementById('s0run'), resetBtn=document.getElementById('s0reset');
+  const LR=0.05, MAX=260;
+  let ball={x:+sx.value, trail:[], color:'var(--hot)'};
+  let step=0, timer=null;
+
+  function draw(){
+    chart.innerHTML=landSVG([ball]);
+    stepEl.textContent='step '+step;
+    lossEl.textContent='L '+VZ.fmt(LAND.f(ball.x),3);
+  }
+  function stop(){ if(timer){ clearInterval(timer); timer=null; runBtn.textContent='▶ SGD 실행'; } }
+  function reset(){ stop(); step=0; ball={x:+sx.value, trail:[], color:'var(--hot)'}; draw(); }
+  function tick(){
+    ball.trail.push(ball.x);
+    if(ball.trail.length>200) ball.trail.shift();
+    const gr=LAND.g(ball.x);
+    ball.x-=LR*gr;
+    step++;
+    draw();
+    if(step>=MAX || Math.abs(gr)<1e-4) stop();
+  }
+  runBtn.addEventListener('click',function(){
+    if(timer){ stop(); return; }   // 중복 시작 가드
+    if(step>=MAX) reset();
+    runBtn.textContent='⏸ 일시정지';
+    timer=setInterval(tick,28);
+  });
+  resetBtn.addEventListener('click',reset);
+  sx.addEventListener('input',function(){ xv.textContent=VZ.fmt(+sx.value); reset(); });
+  draw();
+})();
+
+// ---------- STEP 1 : SGD vs 모멘텀 vs Adam ----------
+(function(){
+  const chart=document.getElementById('s1chart');
+  const statusEl=document.getElementById('s1status');
+  const stepEl=document.getElementById('s1step');
+  const runBtn=document.getElementById('s1run'), resetBtn=document.getElementById('s1reset');
+  const X0=-3.5, MAX=400;
+  let step=0, timer=null, balls=null;
+
+  function fresh(){
+    return [
+      {name:'SGD',     color:'var(--k)',    x:X0, trail:[], lr:0.04, upd:updSGD},
+      {name:'모멘텀',  color:'var(--q)',    x:X0, trail:[], lr:0.04, v:0, beta:0.9, upd:updMom},
+      {name:'Adam',    color:'var(--good)', x:X0, trail:[], lr:0.2, m:0, s:0, t:0, upd:updAdam}
+    ];
+  }
+  function updSGD(b){ b.x -= b.lr*LAND.g(b.x); }
+  function updMom(b){ b.v = b.beta*b.v - b.lr*LAND.g(b.x); b.x += b.v; }
+  function updAdam(b){
+    const b1=0.9, b2=0.999, eps=1e-8;
+    b.t++;
+    const gr=LAND.g(b.x);
+    b.m = b1*b.m + (1-b1)*gr;
+    b.s = b2*b.s + (1-b2)*gr*gr;
+    const mh=b.m/(1-Math.pow(b1,b.t)), sh=b.s/(1-Math.pow(b2,b.t));
+    b.x -= b.lr*mh/(Math.sqrt(sh)+eps);
+  }
+  function draw(){
+    chart.innerHTML=landSVG(balls.map(function(b){ return {x:b.x, trail:b.trail, color:b.color, label:b.name}; }));
+    stepEl.textContent='step '+step;
+    statusEl.innerHTML=balls.map(function(b){
+      return '<div class="card"><div class="label" style="color:'+b.color+'">'+b.name+'</div>'+
+        '<div class="mono" style="font-size:15px;font-weight:700">x = '+VZ.fmt(b.x)+'</div>'+
+        '<div class="mono" style="font-size:13px;color:var(--muted)">L = '+VZ.fmt(LAND.f(b.x),3)+'</div></div>';
+    }).join('');
+  }
+  function stop(){ if(timer){ clearInterval(timer); timer=null; runBtn.textContent='▶ 동시에 굴리기'; } }
+  function reset(){ stop(); step=0; balls=fresh(); draw(); }
+  function tick(){
+    for(const b of balls){
+      b.trail.push(b.x);
+      if(b.trail.length>200) b.trail.shift();
+      b.upd(b);
+    }
+    step++;
+    draw();
+    if(step>=MAX) stop();
+  }
+  runBtn.addEventListener('click',function(){
+    if(timer){ stop(); return; }   // 중복 시작 가드
+    if(step>=MAX) reset();
+    runBtn.textContent='⏸ 일시정지';
+    timer=setInterval(tick,26);
+  });
+  resetBtn.addEventListener('click',reset);
+  reset();
+})();
+
+// ---------- STEP 2 : 과적합 (다항식 피팅) ----------
+(function(){
+  // 하드코딩 데이터: y = sin(πx) + 노이즈
+  const XT=[-1,-0.78,-0.56,-0.33,-0.11,0.11,0.33,0.56,0.78,1];
+  const YT=[0.08,-0.76,-0.88,-0.91,-0.19,0.24,0.93,1.10,0.50,0.06];
+  const XS=[-0.89,-0.45,0,0.45,0.89];
+  const YS=[-0.29,-0.89,-0.08,0.93,0.43];
+
+  // 가우스 소거 (부분 피벗) — Ax = b 풀기
+  function gauss(A,bv){
+    const n=A.length, M=A.map(function(r,i){ return r.concat([bv[i]]); });
+    for(let c=0;c<n;c++){
+      let p=c;
+      for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r;
+      const tmp=M[c]; M[c]=M[p]; M[p]=tmp;
+      if(Math.abs(M[c][c])<1e-12) continue;
+      for(let r=0;r<n;r++){
+        if(r===c) continue;
+        const k=M[r][c]/M[c][c];
+        for(let j=c;j<=n;j++) M[r][j]-=k*M[c][j];
+      }
+    }
+    return M.map(function(row,i){ return Math.abs(row[i])<1e-12 ? 0 : row[n]/row[i]; });
+  }
+  // 정규방정식 (XᵀX)w = Xᵀy 로 차수 d 다항 피팅
+  function polyfit(xs,ys,d){
+    const n=d+1;
+    const A=[]; for(let i=0;i<n;i++){ A.push([]); for(let j=0;j<n;j++) A[i].push(0); }
+    const bb=new Array(n).fill(0);
+    for(let i=0;i<xs.length;i++){
+      const pw=[1];
+      for(let k=1;k<2*n;k++) pw.push(pw[k-1]*xs[i]);
+      for(let r=0;r<n;r++){
+        bb[r]+=pw[r]*ys[i];
+        for(let c=0;c<n;c++) A[r][c]+=pw[r+c];
+      }
+    }
+    return gauss(A,bb);
+  }
+  function evalP(co,x){ let s=0,p=1; for(let i=0;i<co.length;i++){ s+=co[i]*p; p*=x; } return s; }
+  function mseOf(co,xs,ys){
+    let s=0;
+    for(let i=0;i<xs.length;i++){ const e=evalP(co,xs[i])-ys[i]; s+=e*e; }
+    return s/xs.length;
+  }
+
+  function fitSVG(co){
+    const W=640,H=340,pad=42, X0=-1.12,X1=1.12, Y0=-1.9,Y1=1.9;
+    const sx=function(x){ return pad+(x-X0)/(X1-X0)*(W-pad*1.4); };
+    const sy=function(y){ return H-pad-(y-Y0)/(Y1-Y0)*(H-pad*1.5); };
+    let g='';
+    for(let gy=-1.5; gy<=1.6; gy+=0.5){
+      g+='<line class="gridline" x1="'+pad+'" y1="'+sy(gy)+'" x2="'+(W-pad*0.4)+'" y2="'+sy(gy)+'"></line>';
+      g+='<text class="axislabel" x="'+(pad-8)+'" y="'+(sy(gy)+3)+'" text-anchor="end">'+VZ.fmt(gy,1)+'</text>';
+    }
+    for(let gx=-1; gx<=1; gx+=0.5){
+      g+='<line class="gridline" x1="'+sx(gx)+'" y1="'+(pad*0.4)+'" x2="'+sx(gx)+'" y2="'+(H-pad)+'"></line>';
+      g+='<text class="axislabel" x="'+sx(gx)+'" y="'+(H-pad+16)+'" text-anchor="middle">'+VZ.fmt(gx,1)+'</text>';
+    }
+    g+='<line class="axis" x1="'+pad+'" y1="'+(pad*0.4)+'" x2="'+pad+'" y2="'+(H-pad)+'"></line>';
+    g+='<line class="axis" x1="'+pad+'" y1="'+(H-pad)+'" x2="'+(W-pad*0.4)+'" y2="'+(H-pad)+'"></line>';
+    // 진짜 규칙 sin(πx) — 흐린 점선
+    let tp='';
+    for(let x=X0;x<=X1;x+=0.02) tp+=sx(x)+','+sy(Math.sin(Math.PI*x))+' ';
+    g+='<polyline points="'+tp+'" fill="none" stroke="var(--slate)" stroke-width="1.5" stroke-dasharray="5 5" opacity="0.45"></polyline>';
+    // 피팅 곡선 (화면 밖 클램프)
+    let fp='';
+    for(let x=X0;x<=X1;x+=0.01){
+      let y=evalP(co,x);
+      if(y>Y1) y=Y1; if(y<Y0) y=Y0;
+      fp+=sx(x)+','+sy(y)+' ';
+    }
+    g+='<polyline points="'+fp+'" fill="none" stroke="var(--hot)" stroke-width="2.5"></polyline>';
+    for(let i=0;i<XT.length;i++)
+      g+='<circle cx="'+sx(XT[i])+'" cy="'+sy(YT[i])+'" r="5.5" fill="var(--q)" stroke="#04121f" stroke-width="1.5"></circle>';
+    for(let i=0;i<XS.length;i++)
+      g+='<rect x="'+(sx(XS[i])-5)+'" y="'+(sy(YS[i])-5)+'" width="10" height="10" fill="var(--k)" stroke="#04121f" stroke-width="1.5" transform="rotate(45 '+sx(XS[i])+' '+sy(YS[i])+')"></rect>';
+    // 범례
+    g+='<circle cx="'+(W-185)+'" cy="'+(pad*0.55)+'" r="5" fill="var(--q)"></circle><text class="axislabel" x="'+(W-176)+'" y="'+(pad*0.55+3)+'">train(10)</text>';
+    g+='<rect x="'+(W-110)+'" y="'+(pad*0.55-4)+'" width="8" height="8" fill="var(--k)" transform="rotate(45 '+(W-106)+' '+(pad*0.55)+')"></rect><text class="axislabel" x="'+(W-96)+'" y="'+(pad*0.55+3)+'">test(5)</text>';
+    return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-width:'+W+'px">'+g+'</svg>';
+  }
+
+  const sd=document.getElementById('s2deg'), dv=document.getElementById('s2degv');
+  const chart=document.getElementById('s2chart');
+  const trBar=document.getElementById('s2trbar'), teBar=document.getElementById('s2tebar');
+  const trV=document.getElementById('s2trv'), teV=document.getElementById('s2tev');
+  const verdictEl=document.getElementById('s2verdict'), descEl=document.getElementById('s2desc');
+  const SCALE=0.5; // 막대 풀스케일 MSE
+
+  function verdict(d,tr,te){
+    if(d<=2) return ['과소적합 (underfitting)','직선/이차로는 사인 모양 자체를 못 그려요. train·test 둘 다 커요. 모델이 너무 단순합니다.'];
+    if(d<=5) return ['적절한 적합 ✓','곡선이 점들의 흐름(사인 모양)을 따라가고, test 오차가 가장 낮은 구간이에요. 이 정도가 딱 좋아요.'];
+    if(d<=7) return ['과적합 시작…','train 오차는 계속 줄지만 test 오차가 슬슬 올라가요. 점 사이에서 곡선이 흔들리기 시작합니다.'];
+    return ['과적합 (overfitting)!','train MSE ≈ 0 — 점 10개를 노이즈까지 통째로 외웠어요. 그 대가로 처음 보는 test 점에선 크게 틀립니다.'];
+  }
+  function fmtMse(v){ return v<5e-5 ? '≈ 0' : VZ.fmt(v,4); }
+  function render(){
+    const d=+sd.value;
+    dv.textContent=d;
+    const co=polyfit(XT,YT,d);
+    const tr=mseOf(co,XT,YT), te=mseOf(co,XS,YS);
+    chart.innerHTML=fitSVG(co);
+    trBar.style.width=Math.min(tr/SCALE,1)*100+'%';
+    teBar.style.width=Math.min(te/SCALE,1)*100+'%';
+    trV.textContent=fmtMse(tr);
+    teV.textContent=fmtMse(te);
+    const v=verdict(d,tr,te);
+    verdictEl.textContent='차수 '+d+' — '+v[0];
+    descEl.textContent=v[1];
+  }
+  sd.addEventListener('input',render);
+  render();
+})();
+
+// ---------- STEP 3 : 드롭아웃 + 조기종료 ----------
+(function(){
+  // (a) 드롭아웃 네트워크
+  const LAYERS=[3,5,5,2];                       // input, hidden, hidden, output
+  const netEl=document.getElementById('s3net');
+  const cntEl=document.getElementById('s3cnt');
+  let dropped=LAYERS.map(function(n){ return new Array(n).fill(false); });
+
+  function pos(){
+    const W=560,H=260, xs=[70,210,350,490];
+    return LAYERS.map(function(n,li){
+      const gap=Math.min(46, (H-40)/n);
+      const y0=H/2-(n-1)*gap/2;
+      const arr=[];
+      for(let i=0;i<n;i++) arr.push({x:xs[li], y:y0+i*gap});
+      return arr;
+    });
+  }
+  function netSVG(){
+    const P=pos(), W=560,H=260;
+    let g='';
+    for(let l=0;l<LAYERS.length-1;l++)
+      for(let i=0;i<LAYERS[l];i++)
+        for(let j=0;j<LAYERS[l+1];j++){
+          const off=dropped[l][i]||dropped[l+1][j];
+          g+='<line x1="'+P[l][i].x+'" y1="'+P[l][i].y+'" x2="'+P[l+1][j].x+'" y2="'+P[l+1][j].y+
+             '" stroke="rgba(230,235,245,'+(off?0.04:0.18)+')" stroke-width="1.2"></line>';
+        }
+    const colors=['var(--q)','var(--v)','var(--v)','var(--good)'];
+    for(let l=0;l<LAYERS.length;l++)
+      for(let i=0;i<LAYERS[l];i++){
+        const p=P[l][i], off=dropped[l][i];
+        if(off){
+          g+='<circle cx="'+p.x+'" cy="'+p.y+'" r="13" fill="#1a2236" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="3 3"></circle>';
+          g+='<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" fill="var(--faint)" font-size="12">✕</text>';
+        } else {
+          g+='<circle cx="'+p.x+'" cy="'+p.y+'" r="13" fill="'+colors[l]+'" stroke="#04121f" stroke-width="2"></circle>';
+        }
+      }
+    const labs=['입력','은닉 1','은닉 2','출력'], xs=[70,210,350,490];
+    for(let l=0;l<4;l++)
+      g+='<text class="axislabel" x="'+xs[l]+'" y="'+(H-6)+'" text-anchor="middle">'+labs[l]+'</text>';
+    return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-width:'+W+'px">'+g+'</svg>';
+  }
+  function activeCnt(){
+    let on=0, tot=0;
+    for(const l of [1,2]){ for(const d of dropped[l]){ tot++; if(!d) on++; } }
+    return on+'/'+tot;
+  }
+  function doDrop(){
+    dropped=LAYERS.map(function(n,li){
+      if(li===0||li===LAYERS.length-1) return new Array(n).fill(false);  // 입·출력은 안 끔
+      const arr=[];
+      for(let i=0;i<n;i++) arr.push(Math.random()<0.5);
+      if(arr.every(function(d){ return d; })) arr[Math.floor(Math.random()*n)]=false; // 최소 1개 유지
+      return arr;
+    });
+    netEl.innerHTML=netSVG();
+    cntEl.textContent='hidden '+activeCnt()+' 활성';
+  }
+  function allOn(){
+    dropped=LAYERS.map(function(n){ return new Array(n).fill(false); });
+    netEl.innerHTML=netSVG();
+    cntEl.textContent='hidden '+activeCnt()+' 활성';
+  }
+  document.getElementById('s3drop').addEventListener('click',doDrop);
+  document.getElementById('s3all').addEventListener('click',allOn);
+  allOn();
+
+  // (b) 조기종료: train/val 손실 곡선 (합성, 하드코딩 공식)
+  const EPOCHS=80;
+  const trL=function(e){ return 0.05 + 1.30*Math.exp(-e/14); };
+  const vaL=function(e){ return 0.27 + 1.15*Math.exp(-e/12) + 0.0065*e + 0.015*Math.sin(e*0.8); };
+  const trArr=[], vaArr=[];
+  for(let e=0;e<=EPOCHS;e++){ trArr.push(trL(e)); vaArr.push(vaL(e)); }
+  let best=0;
+  for(let e=1;e<=EPOCHS;e++) if(vaArr[e]<vaArr[best]) best=e;
+
+  function curveSVG(){
+    const W=640,H=320,pad=46, Y1=1.6;
+    const sx=function(e){ return pad+e/EPOCHS*(W-pad*1.4); };
+    const sy=function(v){ return H-pad-(v/Y1)*(H-pad*1.5); };
+    let g='';
+    for(let f=0;f<=4;f++){
+      const yv=Y1*f/4;
+      g+='<line class="gridline" x1="'+pad+'" y1="'+sy(yv)+'" x2="'+(W-pad*0.4)+'" y2="'+sy(yv)+'"></line>';
+      g+='<text class="axislabel" x="'+(pad-8)+'" y="'+(sy(yv)+3)+'" text-anchor="end">'+VZ.fmt(yv,1)+'</text>';
+    }
+    for(let e=0;e<=EPOCHS;e+=20)
+      g+='<text class="axislabel" x="'+sx(e)+'" y="'+(H-pad+16)+'" text-anchor="middle">'+e+'</text>';
+    g+='<line class="axis" x1="'+pad+'" y1="'+(pad*0.4)+'" x2="'+pad+'" y2="'+(H-pad)+'"></line>';
+    g+='<line class="axis" x1="'+pad+'" y1="'+(H-pad)+'" x2="'+(W-pad*0.4)+'" y2="'+(H-pad)+'"></line>';
+    g+='<text class="axislabel" x="'+(W-pad*0.4)+'" y="'+(H-pad+16)+'" text-anchor="end">epoch</text>';
+    g+='<text class="axislabel" x="'+(pad-8)+'" y="'+(pad*0.4-4)+'" text-anchor="end">loss</text>';
+    // 과적합 구간 음영 (best 이후)
+    g+='<rect x="'+sx(best)+'" y="'+(pad*0.4)+'" width="'+(sx(EPOCHS)-sx(best))+'" height="'+(H-pad-pad*0.4)+
+       '" fill="rgba(251,113,133,.06)"></rect>';
+    g+='<text class="axislabel" x="'+(sx(best)+8)+'" y="'+(pad*0.4+14)+'" fill="var(--k)">↗ 과적합 구간 (val 다시 상승)</text>';
+    // 곡선
+    const mk=function(arr){ return arr.map(function(v,e){ return sx(e)+','+sy(v); }).join(' '); };
+    g+='<polyline points="'+mk(trArr)+'" fill="none" stroke="var(--q)" stroke-width="2.5"></polyline>';
+    g+='<polyline points="'+mk(vaArr)+'" fill="none" stroke="var(--k)" stroke-width="2.5"></polyline>';
+    // 조기종료 지점
+    g+='<line x1="'+sx(best)+'" y1="'+(pad*0.4)+'" x2="'+sx(best)+'" y2="'+(H-pad)+'" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="5 4"></line>';
+    g+='<circle cx="'+sx(best)+'" cy="'+sy(vaArr[best])+'" r="6" fill="var(--good)" stroke="#04121f" stroke-width="2"></circle>';
+    g+='<text class="axislabel" x="'+sx(best)+'" y="'+(H-pad-8)+'" text-anchor="middle" fill="var(--good)" font-weight="700">⏹ 조기종료</text>';
+    // 범례
+    g+='<line x1="'+(W-200)+'" y1="'+(pad*0.55)+'" x2="'+(W-172)+'" y2="'+(pad*0.55)+'" stroke="var(--q)" stroke-width="2.5"></line><text class="axislabel" x="'+(W-166)+'" y="'+(pad*0.55+3)+'">train</text>';
+    g+='<line x1="'+(W-120)+'" y1="'+(pad*0.55)+'" x2="'+(W-92)+'" y2="'+(pad*0.55)+'" stroke="var(--k)" stroke-width="2.5"></line><text class="axislabel" x="'+(W-86)+'" y="'+(pad*0.55+3)+'">val</text>';
+    return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-width:'+W+'px">'+g+'</svg>';
+  }
+  document.getElementById('s3curve').innerHTML=curveSVG();
+  document.getElementById('s3best').textContent='epoch '+best+' (val 손실 최저 '+VZ.fmt(vaArr[best],3)+')';
+})();
+</script>
+</body>
+</html>

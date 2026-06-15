@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>09 언어 모델 · N-gram · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  .tokchip{display:inline-flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;
+    padding:6px 11px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);margin:3px;}
+  .tokchip.bos{color:var(--q);border-color:rgba(55,189,248,.4);}
+  .tokchip.eos{color:var(--good);border-color:rgba(52,211,153,.4);}
+  .tokchip.last{background:rgba(251,191,36,.14);border-color:var(--hot);color:var(--hot);}
+  .corpusbox{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:14px 18px;
+    font-family:'JetBrains Mono',monospace;font-size:13px;line-height:2;color:var(--muted);}
+  .corpusbox .bos{color:var(--q);} .corpusbox .eos{color:var(--good);}
+  .cand{cursor:pointer;border-radius:10px;padding:2px 6px;transition:.15s;}
+  .cand:hover{background:rgba(55,189,248,.08);}
+  .pplbig{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 3 · NLP BASICS</div>
+    <h1>언어 모델 — 다음 단어 맞추기 기계</h1>
+    <p class="intro">언어 모델(Language Model)은 문장에 <b>확률</b>을 매기는 모델입니다. "이 단어 다음엔 무슨 단어가 올까?"를 코퍼스의 <b>카운트</b>로 답하는 것이 N-gram 모델이에요. 조건부확률 → 바이그램 → <b>펄플렉서티(PPL)</b>까지, 작은 한국어 코퍼스로 전부 직접 계산해 봅니다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 연쇄 법칙</button>
+    <button data-s="1">01 · 바이그램 카운트</button>
+    <button data-s="2">02 · 문장 생성 체험</button>
+    <button data-s="3">03 · 펄플렉서티</button>
+  </nav>
+
+  <!-- STEP 0 : 연쇄 법칙 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Chain Rule</span>
+    <h2>문장의 확률 = 조건부확률의 곱</h2>
+    <p class="lead">언어 모델은 문장 전체의 확률을 한 번에 구하지 않아요. <b>앞 단어들이 주어졌을 때 다음 단어가 나올 확률</b>을 차례로 곱합니다. 이것이 확률의 <b>연쇄 법칙(chain rule)</b>이에요.</p>
+
+    <div class="formula" style="margin-bottom:18px">P(w₁ w₂ … w<sub>n</sub>) = Π P(w<sub>i</sub> | w₁ … w<sub>i−1</sub>)</div>
+
+    <p class="sub">예시 문장: <span class="mono" style="color:var(--q)">&lt;s&gt; 나는 고양이를 좋아한다 &lt;/s&gt;</span></p>
+    <div class="formula" id="chainFormula" style="text-align:left;line-height:2.2"></div>
+
+    <div class="callout q" style="margin-top:22px">
+      <div class="ttl">그런데 문제가 하나 있어요</div>
+      <p>마지막 항 <code>P(&lt;/s&gt; | &lt;s&gt;, 나는, 고양이를, 좋아한다)</code> 처럼 <b>히스토리(앞 단어 전체)가 길어질수록</b>, 그 조합이 코퍼스에 그대로 등장할 확률은 거의 0에 가까워집니다. 카운트할 데이터가 없으니 확률을 추정할 수 없어요.</p>
+      <p>그래서 <b>N-gram 근사</b>를 씁니다. "다음 단어는 <b>바로 앞 N−1개 단어</b>에만 의존한다"고 가정하는 거예요. N=2면 <b>바이그램(bigram)</b>:</p>
+      <div class="formula">P(w<sub>i</sub> | w₁ … w<sub>i−1</sub>) ≈ P(w<sub>i</sub> | w<sub>i−1</sub>)</div>
+    </div>
+
+    <p class="note">→ 히스토리를 1단어로 줄이면 "단어 쌍"만 세면 되니까, 작은 코퍼스로도 확률을 추정할 수 있어요. 다음 스텝에서 직접 세어 봅시다.</p>
+  </section>
+
+  <!-- STEP 1 : 바이그램 카운트 -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Bigram Count</span>
+    <h2>코퍼스에서 단어 쌍을 세면 확률이 나온다</h2>
+    <p class="lead">아래 7문장 코퍼스에서 <b>바이그램(연속한 단어 쌍)</b>을 전부 세고, 행별로 나누면 조건부확률 <b>P(다음 단어 | 현재 단어)</b>가 됩니다. 전부 실제로 계산한 값이에요.</p>
+
+    <p class="sub">코퍼스 (문장 경계 토큰 <span class="mono" style="color:var(--q)">&lt;s&gt;</span> / <span class="mono" style="color:var(--good)">&lt;/s&gt;</span> 포함)</p>
+    <div class="corpusbox" id="corpusBox"></div>
+
+    <p class="sub" style="margin-top:24px">① 바이그램 카운트 행렬 — count(현재, 다음)</p>
+    <div class="mx-op-row" id="countMx"></div>
+
+    <div class="arrow-v">↓ 각 행을 행 합계로 나누기 — P(다음|현재) = count(현재,다음) ÷ count(현재)</div>
+
+    <p class="sub">② 조건부확률 행렬 (%)</p>
+    <div class="mx-op-row" id="probMx"></div>
+
+    <p class="note" style="margin-top:14px">→ 예를 들어 <b>&lt;s&gt;</b> 행을 보면, 문장이 "나는"으로 시작할 확률이 가장 높죠. 각 행의 확률을 다 더하면 정확히 100%가 됩니다. 이 표 하나가 곧 <b>바이그램 언어 모델</b>이에요.</p>
+  </section>
+
+  <!-- STEP 2 : 문장 생성 체험 -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — Generation</span>
+    <h2>바이그램 확률을 따라 문장을 직접 만들어 보기</h2>
+    <p class="lead"><b>&lt;s&gt;</b>에서 시작해, 현재 단어가 주는 다음 단어 후보 중 하나를 <b>클릭</b>하면 문장이 이어집니다. <b>&lt;/s&gt;</b>를 고르면 문장 완성!</p>
+
+    <div class="label">지금까지의 문장</div>
+    <div id="genSentence" style="margin-bottom:6px"></div>
+    <div class="ctrl"><button class="btn" id="genReset">↺ 처음부터</button>
+      <span class="note" id="genStatus"></span></div>
+
+    <div class="label" style="margin-top:18px" id="candLabel"></div>
+    <div id="genCands"></div>
+
+    <div class="callout v" style="margin-top:22px">
+      <div class="ttl">탐욕적 선택 vs 확률적 선택</div>
+      <p>매번 <b>가장 확률 높은 후보</b>만 고르는 것이 <b>탐욕적(greedy) 디코딩</b> — 항상 같은 문장이 나와요. 반대로 확률 분포에서 <b>주사위를 굴려 뽑는</b> 것이 <b>샘플링(sampling)</b> — 매번 다른, 다양한 문장이 나옵니다. 실제 텍스트 생성기는 이 둘 사이(temperature, top-k 등)를 조절해요.</p>
+    </div>
+  </section>
+
+  <!-- STEP 3 : 펄플렉서티 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — Perplexity</span>
+    <h2>모델이 얼마나 "덜 헷갈리는지" 재는 자, PPL</h2>
+    <p class="lead">펄플렉서티(PPL)는 테스트 문장의 확률을 단어 수로 정규화한 값 — <b>낮을수록</b> 모델이 그 문장을 잘 예측한다는 뜻입니다. 직관적으로 <b>"매 단어에서 평균 몇 개를 두고 헷갈리는가"</b>예요(PPL=5면 매번 5지선다 푸는 셈, PPL=1이면 100% 확신).</p>
+
+    <div class="formula" style="margin-bottom:18px">PPL(W) = P(w₁ … w<sub>N</sub>)<sup>−1/N</sup> &nbsp;&nbsp;(N = 예측한 토큰 수)</div>
+
+    <div class="view-toggle" id="smoothToggle">
+      <button data-v="raw" class="on">스무딩 없음</button>
+      <button data-v="laplace">라플라스 스무딩 (+1)</button>
+    </div>
+
+    <div class="grid3" style="grid-template-columns:1fr;gap:18px" id="pplCards"></div>
+
+    <div class="callout good" style="margin-top:8px">
+      <div class="ttl">희소성 문제와 라플라스 스무딩</div>
+      <p>테스트 문장 B에는 코퍼스에 <b>한 번도 안 나온 바이그램</b>이 있어요. 카운트가 0이면 확률도 0 → 문장 전체 확률이 0 → <b>PPL = ∞</b>. 단 한 쌍 때문에 문장 전체가 "불가능"이 되는 건 너무 가혹하죠.</p>
+      <p><b>라플라스 스무딩</b>은 모든 카운트에 +1을 해서 확률 0을 없앱니다: <code>P(w′|w) = (count(w,w′)+1) ÷ (count(w)+V)</code> (V = 어휘 크기). 위 토글로 켜 보세요 — B의 PPL이 ∞에서 유한한 값으로 내려오지만, 여전히 A보다 <b>훨씬 높습니다</b>. "어색한 문장"이라는 판정은 유지되는 거예요.</p>
+    </div>
+  </section>
+
+  <p class="foot">// 모든 카운트·확률·PPL은 브라우저에서 실제 계산. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '09 · Language Model');
+VZ.setupStepper();
+
+/* ============ 공통 데이터: 코퍼스 & 바이그램 모델 ============ */
+const BOS='<s>', EOS='</s>';
+const CORPUS=[
+  '나는 고양이를 좋아한다',
+  '나는 강아지를 좋아한다',
+  '고양이는 생선을 좋아한다',
+  '강아지는 공놀이를 좋아한다',
+  '나는 고양이를 매일 본다',
+  '고양이는 낮잠을 매일 잔다',
+  '나는 강아지를 매일 본다'
+];
+const SENTS=CORPUS.map(s=>[BOS,...s.split(' '),EOS]);
+
+// 바이그램/유니그램 카운트 (전부 실계산)
+const bi={}, uni={};
+SENTS.forEach(toks=>{
+  for(let i=0;i<toks.length-1;i++){
+    const w=toks[i], nx=toks[i+1];
+    uni[w]=(uni[w]||0)+1;
+    (bi[w]=bi[w]||{})[nx]=(bi[w][nx]||0)+1;
+  }
+});
+// 어휘: "다음 단어"로 올 수 있는 토큰 (BOS 제외, EOS 포함)
+const VOCAB=[...new Set(SENTS.flat())].filter(w=>w!==BOS);
+const V=VOCAB.length;
+
+const cnt=(w,nx)=>(bi[w]&&bi[w][nx])||0;
+const prob=(w,nx)=>uni[w]?cnt(w,nx)/uni[w]:0;
+const probLap=(w,nx)=>(cnt(w,nx)+1)/((uni[w]||0)+V);
+
+const esc=t=>t.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const chip=(t,extra='')=>{
+  const cls=t===BOS?'bos':t===EOS?'eos':'';
+  return `<span class="tokchip ${cls} ${extra}">${esc(t)}</span>`;
+};
+
+/* ============ STEP 0 : 연쇄 법칙 ============ */
+(function(){
+  const toks=[BOS,'나는','고양이를','좋아한다',EOS];
+  const lines=[];
+  for(let i=1;i<toks.length;i++){
+    const hist=toks.slice(0,i).map(esc).join(', ');
+    const color=i===toks.length-1?'var(--k)':'var(--q)';
+    lines.push(`<span style="color:var(--faint)">${i===1?'P(문장) =':'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;×'}</span> P(<b style="color:${color}">${esc(toks[i])}</b> | ${hist})`);
+  }
+  document.getElementById('chainFormula').innerHTML=lines.join('<br>');
+})();
+
+/* ============ STEP 1 : 카운트/확률 행렬 ============ */
+(function(){
+  // 코퍼스 표시
+  document.getElementById('corpusBox').innerHTML=
+    SENTS.map(t=>t.map(w=>w===BOS?`<span class="bos">${esc(w)}</span>`:w===EOS?`<span class="eos">${esc(w)}</span>`:w).join(' ')).join('<br>');
+
+  // 어휘가 작으므로 절단 없이 전체 행렬을 그린다 — 절단하면 "행 합=100%"가 깨진 거짓 행렬이 된다
+  const rows=Object.keys(uni).sort((a,b)=>uni[b]-uni[a]||a.localeCompare(b));
+  const cols=[...VOCAB];
+
+  const C=rows.map(w=>cols.map(nx=>cnt(w,nx)));
+  const P=rows.map(w=>cols.map(nx=>prob(w,nx)));
+  const rowLabs=rows.map(w=>`${esc(w)}<small>(${uni[w]})</small>`);
+  const colLabs=cols.map(esc);
+
+  document.getElementById('countMx').innerHTML=VZ.mxMatrix(C,{
+    rowLabs,colLabs,acc:'var(--q)',title:'count(현재 → 다음)',
+    shape:`행 합계 = count(현재)`,zeroDim:true,fmtCell:v=>v
+  });
+  document.getElementById('probMx').innerHTML=VZ.mxMatrix(P,{
+    rowLabs,colLabs,acc:'var(--hot)',title:'P(다음 | 현재) — %',
+    shape:`각 행 합 = 100%`,pct:true,zeroDim:true
+  });
+})();
+
+/* ============ STEP 2 : 문장 생성 체험 ============ */
+(function(){
+  let seq;
+  const sEl=document.getElementById('genSentence');
+  const cEl=document.getElementById('genCands');
+  const lEl=document.getElementById('candLabel');
+  const stEl=document.getElementById('genStatus');
+
+  function render(){
+    const cur=seq[seq.length-1];
+    const done=cur===EOS;
+    sEl.innerHTML=seq.map((w,i)=>chip(w,!done&&i===seq.length-1?'last':'')).join('');
+    if(done){
+      lEl.textContent='문장 완성!';
+      cEl.innerHTML='';
+      stEl.innerHTML=`생성된 문장: <b style="color:var(--good)">${seq.slice(1,-1).join(' ')}</b> — "↺ 처음부터"로 다시 만들어 보세요.`;
+      return;
+    }
+    stEl.textContent='';
+    lEl.innerHTML=`P(다음 | <b style="color:var(--hot)">${esc(cur)}</b>) — 후보를 클릭하세요`;
+    const cands=Object.keys(bi[cur]||{}).sort((a,b)=>prob(cur,b)-prob(cur,a)||a.localeCompare(b));
+    const best=cands[0];
+    cEl.innerHTML=cands.map(nx=>
+      `<div class="cand" data-w="${esc(nx)}">${VZ.barRow(esc(nx),prob(cur,nx),{win:nx===best})}</div>`
+    ).join('');
+  }
+  cEl.addEventListener('click',e=>{
+    const d=e.target.closest('.cand'); if(!d)return;
+    const w=d.dataset.w; // 브라우저가 속성 파싱 시 엔티티를 이미 디코딩함
+    seq=[...seq,w];   // 불변 갱신
+    render();
+  });
+  document.getElementById('genReset').addEventListener('click',()=>{seq=[BOS];render();});
+  seq=[BOS];render();
+})();
+
+/* ============ STEP 3 : 펄플렉서티 ============ */
+(function(){
+  const TESTS=[
+    {name:'테스트 문장 A — 코퍼스와 잘 맞음',sent:'나는 고양이를 좋아한다',color:'var(--good)'},
+    {name:'테스트 문장 B — 어색함',sent:'고양이는 공놀이를 잔다',color:'var(--k)'}
+  ];
+
+  // PPL 실계산: 로그 합으로 (P 곱 언더플로 방지)
+  function pplOf(sent,smooth){
+    const toks=[BOS,...sent.split(' '),EOS];
+    const steps=[];
+    let logp=0, zero=false;
+    for(let i=0;i<toks.length-1;i++){
+      const w=toks[i], nx=toks[i+1];
+      const p=smooth?probLap(w,nx):prob(w,nx);
+      if(p===0) zero=true; else logp+=Math.log(p);
+      steps.push({w,nx,c:cnt(w,nx),tot:uni[w]||0,p});
+    }
+    const N=steps.length;
+    const ppl=zero?Infinity:Math.exp(-logp/N);
+    return {steps,N,ppl,zero};
+  }
+
+  function card(t,smooth){
+    const {steps,N,ppl,zero}=pplOf(t.sent,smooth);
+    const rows=steps.map(s=>{
+      const pTxt=s.p===0?'<b style="color:var(--k)">0 !</b>':VZ.fmt(s.p,3);
+      const f=smooth?`(${s.c}+1)/(${s.tot}+${V})`:`${s.c}/${s.tot}`;
+      return `<tr><td>P(${esc(s.nx)} | ${esc(s.w)})</td><td>${s.c}</td><td>${f}</td><td>${pTxt}</td></tr>`;
+    }).join('');
+    const pplTxt=zero?'∞':VZ.fmt(ppl,2);
+    return `<div class="card" style="border-color:${t.color}">
+      <h4 style="color:${t.color}">${t.name}</h4>
+      <div class="mono" style="font-size:14px;margin-bottom:8px">"${t.sent}"</div>
+      <table class="calc">
+        <tr><th>바이그램 확률</th><th>count</th><th>계산식</th><th>P</th></tr>${rows}
+      </table>
+      <div style="margin-top:14px">PPL = P<sup>−1/${N}</sup> = <span class="pplbig" style="color:${zero?'var(--k)':t.color}">${pplTxt}</span>
+      ${zero?'<span class="note"> — 카운트 0 바이그램 탓에 확률이 0이 됐어요!</span>':''}</div>
+    </div>`;
+  }
+
+  function renderAll(smooth){
+    document.getElementById('pplCards').innerHTML=
+      TESTS.map(t=>card(t,smooth)).join('')+
+      `<p class="note" style="margin:0">→ ${smooth
+        ?`스무딩 ON: 모든 카운트에 +1 (어휘 크기 V=${V}). B도 유한한 PPL을 갖지만 여전히 A보다 훨씬 높아요. A의 PPL도 1.63→4.90으로 꽤 오르는데, 코퍼스가 작아 +1이 가져가는 확률 질량이 크기 때문이에요. 코퍼스가 커지면 이 부작용은 작아집니다.`
+        :'스무딩 OFF: A는 낮은 PPL(모델이 거의 안 헷갈림), B는 카운트 0 바이그램 때문에 PPL = ∞. 이것이 <b>희소성(sparsity) 문제</b>예요.'}</p>`;
+  }
+
+  const tg=document.getElementById('smoothToggle');
+  tg.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    tg.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+    renderAll(b.dataset.v==='laplace');
+  });
+  renderAll(false);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>04 신경망 · 역전파 · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 1 · FOUNDATION</div>
+    <h1>인공신경망 — 흘려보내고(forward) 되돌려 배우기(backprop)</h1>
+    <p class="intro">신경망은 <b>입력에 가중치를 곱해 더하고, 활성화 함수로 비틀어</b> 다음 층으로 흘려보냅니다. 출력이 정답과 다르면 그 <b>오차를 거꾸로 전파</b>해 각 가중치의 책임(기울기)을 계산하고, 조금씩 고쳐가요. 작은 <code class="mono">2-2-1</code> 망에서 이 한 사이클을 숫자로 따라가 봅시다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 뉴런 하나</button>
+    <button data-s="1">01 · 순전파 forward</button>
+    <button data-s="2">02 · 역전파 backprop</button>
+    <button data-s="3">03 · 가중치 업데이트</button>
+  </nav>
+
+  <!-- STEP 0 : 뉴런 하나 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — A Single Neuron</span>
+    <h2>입력 × 가중치 합 + 편향 → 활성화</h2>
+    <p class="lead">뉴런 하나는 두 단계예요. 먼저 <b>가중합</b> <code class="mono">z = w₁x₁ + w₂x₂ + b</code> 를 만들고, 그 다음 <b>활성화 함수</b> <code class="mono">a = σ(z)</code> 로 비틉니다. 슬라이더로 입력을 바꿔 보세요.</p>
+
+    <div class="ctrl"><label>입력 x₁</label><input type="range" id="n_x1" min="-2" max="2" step="0.1" value="0.5"><span class="val" id="n_x1v">0.50</span></div>
+    <div class="ctrl"><label>입력 x₂</label><input type="range" id="n_x2" min="-2" max="2" step="0.1" value="0.8"><span class="val" id="n_x2v">0.80</span></div>
+
+    <div class="row" style="gap:24px;align-items:flex-start;margin-top:8px">
+      <div class="chart-wrap" style="flex:none">
+        <div class="label">뉴런 다이어그램</div>
+        <svg id="neuronSvg" width="320" height="200" viewBox="0 0 320 200"></svg>
+      </div>
+      <div style="flex:1;min-width:240px">
+        <div class="label">계산 한 단계씩</div>
+        <div id="neuronCalc"></div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="label">활성화 함수 — 현재 z 위치를 점으로 표시</div>
+      <div class="view-toggle" id="actBtns"></div>
+      <svg id="actSvg" width="560" height="220" viewBox="0 0 560 220"></svg>
+    </div>
+    <p class="note" style="margin-top:14px">→ 활성화 함수가 없으면 아무리 층을 쌓아도 <b>직선(선형)</b> 하나일 뿐이에요. <b>시그모이드</b>는 0~1로 부드럽게 누르고, <b>ReLU</b>는 음수를 0으로 자릅니다. 이 "비선형"이 곡선을 학습하게 해줘요.</p>
+  </section>
+
+  <!-- STEP 1 : forward -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Forward Pass</span>
+    <h2>입력 → 은닉 → 출력으로 값이 흐른다</h2>
+    <p class="lead"><code class="mono">2-2-1</code> 망에서 값은 왼쪽에서 오른쪽으로 흘러요. <b>행렬곱</b>으로 한 층을 한 번에 계산하고, 사이마다 <b>활성화</b>를 끼웁니다.</p>
+
+    <div class="chart-wrap">
+      <div class="label">네트워크 — 입력(파랑) → 은닉(보라) → 출력(초록)</div>
+      <svg id="fwdSvg" width="620" height="240" viewBox="0 0 620 240"></svg>
+    </div>
+
+    <div class="label" style="margin-top:18px">① 입력 × W₁ + b₁ = 은닉 가중합 z₁</div>
+    <div id="fwdMat1"></div>
+    <div class="label" style="margin-top:14px">② 활성화 a₁ = σ(z₁)</div>
+    <div id="fwdAct1"></div>
+    <div class="label" style="margin-top:14px">③ a₁ × W₂ + b₂ = 출력 가중합 z₂ → 예측 ŷ = σ(z₂)</div>
+    <div id="fwdMat2"></div>
+
+    <p class="note" style="margin-top:14px">→ 한 층 = <b>행렬곱 + 편향 + 활성화</b>. 입력 1개를 넣었을 뿐인데 두 은닉 뉴런이 각자 다른 특징을 잡아내고, 마지막에 하나의 예측 <b>ŷ</b> 로 모입니다.</p>
+  </section>
+
+  <!-- STEP 2 : backprop -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--k)">Step 02 — Backpropagation</span>
+    <h2>오차를 거꾸로 흘려 각 가중치의 책임을 계산</h2>
+    <p class="lead">예측 <b>ŷ</b> 와 정답 <b>y</b> 의 차이가 손실이에요. 이 오차를 <b>출력 → 은닉 → 입력</b> 방향으로 거꾸로 전파하며, <b>연쇄법칙</b>으로 가중치마다의 기울기(gradient)를 실제 숫자로 구합니다.</p>
+
+    <div class="chart-wrap">
+      <div class="label">같은 네트워크, 흐름은 반대 — 오차가 오른쪽에서 왼쪽으로(코랄)</div>
+      <svg id="bwdSvg" width="620" height="240" viewBox="0 0 620 240"></svg>
+    </div>
+
+    <div class="callout q">
+      <div class="ttl">왜 "거꾸로"일까?</div>
+      <p>각 가중치가 최종 오차에 <b>얼마나 기여했는지</b>를 알아야 고칠 수 있어요. 출력 쪽 책임을 먼저 구하고, 그걸 한 단계씩 뒤로 곱해 나누면(<b>chain rule</b>) 깊은 곳의 가중치 책임까지 효율적으로 계산됩니다.</p>
+    </div>
+
+    <div class="callout" style="border-color:rgba(251,113,133,.3);background:rgba(251,113,133,.06)">
+      <div class="ttl" style="color:var(--k)">기호 δ(델타) 한 줄 정의</div>
+      <p style="margin:0"><b>δ = 그 뉴런의 입력값 z가 최종 손실에 미치는 영향(∂L/∂z)</b> = "이 뉴런이 오차에 진 책임". 출력층 δ를 먼저 구하고, 그걸 뒤로 곱해 가며 은닉층 δ를 얻어요(연쇄법칙). 가중치 기울기는 <code class="mono">δ × 그 가중치의 입력</code> 으로 나옵니다.</p>
+    </div>
+    <div class="label" style="margin-top:14px">손실 & 출력층 오차 신호</div>
+    <div id="bwdHead"></div>
+    <div class="label" style="margin-top:14px">각 가중치의 기울기 ∂L/∂w (연쇄법칙 분해)</div>
+    <div id="bwdGrads"></div>
+    <p class="note" style="margin-top:14px">→ 기울기는 "이 가중치를 키우면 손실이 <b>얼마나</b> 늘어나는가"예요. 부호가 <b>+</b> 면 줄여야 하고, <b>−</b> 면 키워야 손실이 내려갑니다. 다음 스텝에서 이 값으로 실제로 고쳐요.</p>
+  </section>
+
+  <!-- STEP 3 : update -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — Weight Update</span>
+    <h2>w ← w − lr · 기울기 (경사하강법)</h2>
+    <p class="lead">기울기 반대 방향으로 가중치를 <b>조금씩</b> 옮기면 손실이 내려가요. 얼마나 옮길지는 <b>학습률(lr)</b> 이 정합니다. 버튼을 눌러 한 스텝씩 학습시켜 보세요.</p>
+
+    <div class="ctrl"><label>학습률 lr</label><input type="range" id="lr" min="0.1" max="5" step="0.1" value="1.5"><span class="val" id="lrv">1.50</span></div>
+    <div class="row" style="margin:6px 0 18px">
+      <button class="btn" id="stepBtn">▶ 한 스텝 학습</button>
+      <button class="btn" id="autoBtn">⏩ 자동 반복</button>
+      <button class="btn" id="resetBtn" style="border-color:var(--k);background:rgba(251,113,133,.12);color:var(--k)">↺ 초기화</button>
+      <span class="val" id="epochv" style="min-width:auto">epoch 0</span>
+    </div>
+
+    <div class="row" style="gap:24px;align-items:flex-start">
+      <div style="flex:1;min-width:240px">
+        <div class="label">예측 ŷ 가 정답 y=1.00 에 가까워지는가</div>
+        <div id="predBars"></div>
+      </div>
+      <div class="chart-wrap" style="flex:none">
+        <div class="label">손실 곡선 (epoch별)</div>
+        <svg id="lossSvg" width="320" height="180" viewBox="0 0 320 180"></svg>
+      </div>
+    </div>
+
+    <div class="label" style="margin-top:18px">현재 가중치 (업데이트될 때마다 갱신)</div>
+    <div id="weightView"></div>
+    <p class="note" style="margin-top:14px">→ lr 이 작으면 <b>느리고</b>, 적당하면 ŷ 가 정답에 빠르게 수렴합니다. 일반적인 큰 망에선 lr 이 과하면 손실이 <b>튀거나 발산</b>하지만, 이 작은 데모는 시그모이드가 기울기를 눌러줘서 발산까진 안 가요(발산 체험은 <a href="05-training.html" style="color:var(--q)">CH 05</a>의 손실 지형에서!). 이것이 학습의 핵심 루프예요.</p>
+  </section>
+
+  <p class="foot">// 모든 값은 브라우저에서 실제 계산. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '04 · Neural Net');
+VZ.setupStepper();
+
+// ===== 공통 수학 =====
+const sigmoid = z => 1 / (1 + Math.exp(-z));
+const relu = z => Math.max(0, z);
+
+// ---------- STEP 0 : 뉴런 하나 ----------
+(function(){
+  const w1 = 1.2, w2 = -0.8, b = 0.3;
+  let act = 'sigmoid';
+  const fn = () => act === 'sigmoid' ? sigmoid : relu;
+
+  document.getElementById('actBtns').innerHTML =
+    `<button data-v="sigmoid" class="on">시그모이드 σ</button><button data-v="relu">ReLU</button>`;
+
+  function read(){
+    return { x1: +document.getElementById('n_x1').value, x2: +document.getElementById('n_x2').value };
+  }
+
+  function drawNeuron(x1, x2, z, a){
+    const svg = document.getElementById('neuronSvg');
+    const E = (x,p)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',x);for(const k in p)e.setAttribute(k,p[k]);return e;};
+    svg.innerHTML='';
+    const cx=230, cy=100;
+    // edges
+    svg.appendChild(E('line',{x1:60,y1:55,x2:cx,y2:cy,stroke:'var(--q)','stroke-width':2}));
+    svg.appendChild(E('line',{x1:60,y1:145,x2:cx,y2:cy,stroke:'var(--q)','stroke-width':2}));
+    // weight labels
+    const t1=E('text',{x:135,y:65,fill:'var(--muted)','font-size':11,'font-family':'JetBrains Mono'});t1.textContent='w₁='+VZ.fmt(w1);svg.appendChild(t1);
+    const t2=E('text',{x:135,y:140,fill:'var(--muted)','font-size':11,'font-family':'JetBrains Mono'});t2.textContent='w₂='+VZ.fmt(w2);svg.appendChild(t2);
+    // input nodes
+    [[55,x1,'x₁'],[145,x2,'x₂']].forEach(([y,val,lab])=>{
+      svg.appendChild(E('circle',{cx:60,cy:y,r:22,fill:'var(--panel)',stroke:'var(--blue)','stroke-width':2}));
+      const t=E('text',{x:60,y:y+4,fill:'var(--ink)','font-size':12,'text-anchor':'middle','font-family':'JetBrains Mono'});t.textContent=VZ.fmt(val);svg.appendChild(t);
+      const l=E('text',{x:60,y:y-28,fill:'var(--muted)','font-size':10,'text-anchor':'middle'});l.textContent=lab;svg.appendChild(l);
+    });
+    // neuron body
+    svg.appendChild(E('circle',{cx,cy,r:30,fill:'rgba(251,191,36,.12)',stroke:'var(--hot)','stroke-width':2.5}));
+    const tz=E('text',{x:cx,y:cy-2,fill:'var(--hot)','font-size':12,'text-anchor':'middle','font-family':'JetBrains Mono'});tz.textContent='z='+VZ.fmt(z);svg.appendChild(tz);
+    const ta=E('text',{x:cx,y:cy+13,fill:'var(--good)','font-size':12,'text-anchor':'middle','font-family':'JetBrains Mono'});ta.textContent='a='+VZ.fmt(a);svg.appendChild(ta);
+    const bl=E('text',{x:cx,y:cy+48,fill:'var(--muted)','font-size':10,'text-anchor':'middle','font-family':'JetBrains Mono'});bl.textContent='b='+VZ.fmt(b);svg.appendChild(bl);
+    // output arrow
+    svg.appendChild(E('line',{x1:cx+30,y1:cy,x2:cx+70,y2:cy,stroke:'var(--good)','stroke-width':2,'marker-end':'url(#ah0)'}));
+    const defs=E('defs',{});defs.innerHTML='<marker id="ah0" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--good)"/></marker>';svg.appendChild(defs);
+  }
+
+  function drawActCurve(z){
+    const svg=document.getElementById('actSvg');
+    const E=(x,p)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',x);for(const k in p)e.setAttribute(k,p[k]);return e;};
+    svg.innerHTML='';
+    const W=560,H=220,pad=30;
+    const xmin=-6,xmax=6,ymin=-0.3;
+    // ReLU는 출력이 1을 훌쩍 넘을 수 있어 현재 점이 화면 밖으로 나가지 않게 동적 범위
+    const ymax=Math.max(1.6, fn()(z)*1.15);
+    const sx=v=>pad+(v-xmin)/(xmax-xmin)*(W-2*pad);
+    const sy=v=>H-pad-(v-ymin)/(ymax-ymin)*(H-2*pad);
+    // axes
+    svg.appendChild(E('line',{x1:pad,y1:sy(0),x2:W-pad,y2:sy(0),class:'axis'}));
+    svg.appendChild(E('line',{x1:sx(0),y1:pad,x2:sx(0),y2:H-pad,class:'axis'}));
+    // curve
+    const f=fn();
+    let d='';
+    for(let i=0;i<=120;i++){const xv=xmin+(xmax-xmin)*i/120;const yv=Math.min(f(xv),ymax);d+=(i?'L':'M')+sx(xv).toFixed(1)+','+sy(yv).toFixed(1)+' ';}
+    svg.appendChild(E('path',{d,fill:'none',stroke:'var(--q)','stroke-width':2.5}));
+    // current point
+    const yv=f(z);
+    svg.appendChild(E('line',{x1:sx(z),y1:sy(0),x2:sx(z),y2:sy(yv),stroke:'var(--hot)','stroke-width':1.5,'stroke-dasharray':'4 3'}));
+    svg.appendChild(E('circle',{cx:sx(z),cy:sy(yv),r:6,fill:'var(--hot)',stroke:'#1a1304','stroke-width':1.5}));
+    const t=E('text',{x:sx(z)+9,y:sy(yv)-6,fill:'var(--hot)','font-size':11,'font-family':'JetBrains Mono'});t.textContent=(act==='sigmoid'?'σ':'ReLU')+'('+VZ.fmt(z)+')='+VZ.fmt(yv);svg.appendChild(t);
+    // labels
+    [[-4,'-4'],[0,'0'],[4,'4']].forEach(([v,s])=>{const l=E('text',{x:sx(v),y:sy(0)+15,fill:'var(--muted)','font-size':10,'text-anchor':'middle','font-family':'JetBrains Mono'});l.textContent=s;svg.appendChild(l);});
+    const yl=E('text',{x:sx(0)+6,y:sy(1)-4,fill:'var(--muted)','font-size':10,'font-family':'JetBrains Mono'});yl.textContent='1';svg.appendChild(yl);
+  }
+
+  function update(){
+    const {x1,x2}=read();
+    document.getElementById('n_x1v').textContent=VZ.fmt(x1);
+    document.getElementById('n_x2v').textContent=VZ.fmt(x2);
+    const p1=w1*x1, p2=w2*x2, z=p1+p2+b, a=fn()(z);
+    drawNeuron(x1,x2,z,a);
+    drawActCurve(z);
+    document.getElementById('neuronCalc').innerHTML =
+      `<div class="formula" style="text-align:left">
+        z = w₁·x₁ + w₂·x₂ + b<br>
+        &nbsp;&nbsp;= (<b style="color:var(--q)">${VZ.fmt(w1)}</b>)(<b style="color:var(--blue)">${VZ.fmt(x1)}</b>) + (<b style="color:var(--q)">${VZ.fmt(w2)}</b>)(<b style="color:var(--blue)">${VZ.fmt(x2)}</b>) + ${VZ.fmt(b)}<br>
+        &nbsp;&nbsp;= ${VZ.fmt(p1)} + (${VZ.fmt(p2)}) + ${VZ.fmt(b)} = <b style="color:var(--hot)">${VZ.fmt(z)}</b><br>
+        a = ${act==='sigmoid'?'σ':'ReLU'}(z) = <b style="color:var(--good)">${VZ.fmt(a)}</b>
+      </div>`;
+  }
+
+  ['n_x1','n_x2'].forEach(id=>document.getElementById(id).addEventListener('input',update));
+  document.getElementById('actBtns').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return; act=b.dataset.v;
+    document.querySelectorAll('#actBtns button').forEach(x=>x.classList.toggle('on',x===b));
+    update();
+  });
+  update();
+})();
+
+// ===== STEP 1~3 공유 네트워크 상태 =====
+// 2-2-1 망. 입력 고정, 가중치 학습으로 변함.
+const X = [0.5, 0.8];      // 입력
+const TARGET = 1.0;        // 정답
+const W1_INIT = [[0.5, -0.3],[0.8, 0.2]];  // 2x2 : W1[i][j] = 입력i→은닉j
+const B1_INIT = [0.1, -0.2];
+const W2_INIT = [[0.6],[-0.4]];            // 2x1 : W2[j][0] = 은닉j→출력
+const B2_INIT = 0.05;
+
+function forward(W1,b1,W2,b2){
+  const z1 = [0,1].map(j => X[0]*W1[0][j] + X[1]*W1[1][j] + b1[j]);
+  const a1 = z1.map(sigmoid);
+  const z2 = a1[0]*W2[0][0] + a1[1]*W2[1][0] + b2;
+  const yhat = sigmoid(z2);
+  const loss = 0.5*(yhat-TARGET)**2;
+  return {z1,a1,z2,yhat,loss};
+}
+
+function backward(W1,W2,fp){
+  const {a1,yhat} = fp;
+  // L = 0.5(yhat-y)^2 ; dL/dyhat = (yhat-y)
+  const dyhat = yhat - TARGET;
+  const dz2 = dyhat * yhat*(1-yhat);          // 출력층 오차신호 δ2
+  const gW2 = [[dz2*a1[0]],[dz2*a1[1]]];      // ∂L/∂W2
+  const gb2 = dz2;
+  // 은닉층 오차신호 δ1[j] = dz2 * W2[j] * a1[j](1-a1[j])
+  const dz1 = [0,1].map(j => dz2 * W2[j][0] * a1[j]*(1-a1[j]));
+  const gW1 = [[dz1[0]*X[0], dz1[1]*X[0]],[dz1[0]*X[1], dz1[1]*X[1]]];
+  const gb1 = [dz1[0], dz1[1]];
+  return {dyhat,dz2,dz1,gW1,gb1,gW2,gb2};
+}
+
+// ---------- STEP 1 : forward 다이어그램 ----------
+function drawNet(svgId, dir){
+  const svg=document.getElementById(svgId);
+  const E=(x,p)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',x);for(const k in p)e.setAttribute(k,p[k]);return e;};
+  svg.innerHTML='';
+  const fwd = dir==='fwd';
+  const col = fwd ? 'var(--q)' : 'var(--k)';
+  const defs=E('defs',{});
+  defs.innerHTML=`<marker id="ah_${svgId}" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="${col}"/></marker>`;
+  svg.appendChild(defs);
+  const L=[110,310,510], yIn=[80,160], yHid=[80,160], yOut=[120];
+  // edges input->hidden
+  const drawEdge=(x1,y1,x2,y2)=>{
+    if(fwd) svg.appendChild(E('line',{x1,y1,x2,y2,stroke:col,'stroke-width':1.8,opacity:.65,'marker-end':`url(#ah_${svgId})`}));
+    else    svg.appendChild(E('line',{x1:x2,y1:y2,x2:x1,y2:y1,stroke:col,'stroke-width':1.8,opacity:.65,'marker-end':`url(#ah_${svgId})`}));
+  };
+  yIn.forEach(y1=>yHid.forEach(y2=>drawEdge(L[0],y1,L[1],y2)));
+  yHid.forEach(y1=>yOut.forEach(y2=>drawEdge(L[1],y1,L[2],y2)));
+  // nodes
+  const node=(x,y,fill,stroke,lab)=>{
+    svg.appendChild(E('circle',{cx:x,cy:y,r:26,fill,stroke,'stroke-width':2.2}));
+    const t=E('text',{x,y:y+4,fill:'var(--ink)','font-size':11,'text-anchor':'middle','font-family':'JetBrains Mono'});t.textContent=lab;svg.appendChild(t);
+  };
+  return {svg,E,L,yIn,yHid,yOut,node};
+}
+
+(function(){
+  const fp = forward(W1_INIT,B1_INIT,W2_INIT,B2_INIT);
+  const {svg,E,L,yIn,yHid,yOut,node}=drawNet('fwdSvg','fwd');
+  node(L[0],yIn[0],'var(--panel)','var(--blue)',VZ.fmt(X[0]));
+  node(L[0],yIn[1],'var(--panel)','var(--blue)',VZ.fmt(X[1]));
+  node(L[1],yHid[0],'rgba(192,132,252,.14)','var(--v)',VZ.fmt(fp.a1[0]));
+  node(L[1],yHid[1],'rgba(192,132,252,.14)','var(--v)',VZ.fmt(fp.a1[1]));
+  node(L[2],yOut[0],'rgba(52,211,153,.14)','var(--good)',VZ.fmt(fp.yhat));
+  // layer labels
+  [['입력',L[0]],['은닉 σ',L[1]],['출력 ŷ',L[2]]].forEach(([s,x])=>{
+    const t=E('text',{x,y:30,fill:'var(--muted)','font-size':11,'text-anchor':'middle','font-family':'JetBrains Mono'});t.textContent=s;svg.appendChild(t);
+  });
+
+  // ① W1 행렬곱
+  const xRow = VZ.mxMatrix([X],{acc:'var(--blue)',title:'입력 x',shape:'[1×2]'});
+  const w1M = VZ.mxMatrix(W1_INIT,{acc:'var(--q)',title:'W₁',colLabs:['h₁','h₂'],rowLabs:['x₁','x₂'],shape:'[2×2]'});
+  const z1M = VZ.mxMatrix([fp.z1],{acc:'var(--hot)',title:'z₁ (+b₁)',shape:'[1×2]'});
+  document.getElementById('fwdMat1').innerHTML =
+    VZ.opRow([xRow,w1M,z1M],['×','+b₁=']) +
+    `<p class="mx-note">z₁ⱼ = Σᵢ xᵢ·W₁[i][j] + b₁ⱼ. 예) z₁₁ = ${VZ.fmt(X[0])}·${VZ.fmt(W1_INIT[0][0])} + ${VZ.fmt(X[1])}·${VZ.fmt(W1_INIT[1][0])} + ${VZ.fmt(B1_INIT[0])} = <b>${VZ.fmt(fp.z1[0])}</b></p>`;
+
+  // ② 활성화
+  const z1b = VZ.mxMatrix([fp.z1],{acc:'var(--hot)',title:'z₁',shape:'[1×2]'});
+  const a1b = VZ.mxMatrix([fp.a1],{acc:'var(--v)',title:'a₁ = σ(z₁)',shape:'[1×2]'});
+  document.getElementById('fwdAct1').innerHTML = VZ.opRow([z1b,a1b],['σ →']);
+
+  // ③ W2 행렬곱 + 출력
+  const a1c = VZ.mxMatrix([fp.a1],{acc:'var(--v)',title:'a₁',shape:'[1×2]'});
+  const w2M = VZ.mxMatrix(W2_INIT,{acc:'var(--q)',title:'W₂',colLabs:['ŷ'],rowLabs:['h₁','h₂'],shape:'[2×1]'});
+  const z2M = VZ.mxMatrix([[fp.z2]],{acc:'var(--hot)',title:'z₂ (+b₂)',shape:'[1×1]'});
+  const yM = VZ.mxMatrix([[fp.yhat]],{acc:'var(--good)',title:'ŷ = σ(z₂)',shape:'[1×1]'});
+  document.getElementById('fwdMat2').innerHTML =
+    VZ.opRow([a1c,w2M,z2M,yM],['×','+b₂=','σ=']) +
+    `<p class="mx-note">z₂ = ${VZ.fmt(fp.a1[0])}·${VZ.fmt(W2_INIT[0][0])} + ${VZ.fmt(fp.a1[1])}·${VZ.fmt(W2_INIT[1][0])} + ${VZ.fmt(B2_INIT)} = ${VZ.fmt(fp.z2)} → ŷ = <b style="color:var(--good)">${VZ.fmt(fp.yhat)}</b> (정답 y=${VZ.fmt(TARGET)})</p>`;
+})();
+
+// ---------- STEP 2 : backprop ----------
+(function(){
+  const fp = forward(W1_INIT,B1_INIT,W2_INIT,B2_INIT);
+  const bp = backward(W1_INIT,W2_INIT,fp);
+  const {svg,E,L,yIn,yHid,yOut,node}=drawNet('bwdSvg','bwd');
+  node(L[0],yIn[0],'var(--panel)','var(--blue)',VZ.fmt(X[0]));
+  node(L[0],yIn[1],'var(--panel)','var(--blue)',VZ.fmt(X[1]));
+  node(L[1],yHid[0],'rgba(251,113,133,.10)','var(--k)','δ '+VZ.fmt(bp.dz1[0]));
+  node(L[1],yHid[1],'rgba(251,113,133,.10)','var(--k)','δ '+VZ.fmt(bp.dz1[1]));
+  node(L[2],yOut[0],'rgba(251,113,133,.14)','var(--k)','δ '+VZ.fmt(bp.dz2));
+  [['오차 ←',L[0]],['은닉 δ',L[1]],['출력 오차',L[2]]].forEach(([s,x])=>{
+    const t=E('text',{x,y:30,fill:'var(--k)','font-size':11,'text-anchor':'middle','font-family':'JetBrains Mono'});t.textContent=s;svg.appendChild(t);
+  });
+
+  document.getElementById('bwdHead').innerHTML =
+    `<div class="formula" style="text-align:left">
+      손실 L = ½(ŷ − y)² = ½(${VZ.fmt(fp.yhat)} − ${VZ.fmt(TARGET)})² = <b style="color:var(--k)">${VZ.fmt(fp.loss,4)}</b><br>
+      ∂L/∂ŷ = ŷ − y = <b>${VZ.fmt(bp.dyhat)}</b><br>
+      출력 오차신호 δ₂ = ∂L/∂ŷ · σ'(z₂) = ${VZ.fmt(bp.dyhat)} · ${VZ.fmt(fp.yhat*(1-fp.yhat))} = <b style="color:var(--k)">${VZ.fmt(bp.dz2,4)}</b>
+    </div>`;
+
+  const g = (lab,chain,val) =>
+    `<tr><td>${lab}</td><td style="text-align:left;color:var(--muted)">${chain}</td><td style="color:${val>=0?'var(--hot)':'var(--good)'}">${VZ.fmt(val,4)}</td></tr>`;
+  document.getElementById('bwdGrads').innerHTML =
+    `<table class="calc">
+      <tr><th>가중치</th><th>연쇄법칙 분해</th><th>∂L/∂w</th></tr>
+      ${g('W₂[h₁→ŷ]', `δ₂ · a₁₁ = ${VZ.fmt(bp.dz2,4)}·${VZ.fmt(fp.a1[0])}`, bp.gW2[0][0])}
+      ${g('W₂[h₂→ŷ]', `δ₂ · a₁₂ = ${VZ.fmt(bp.dz2,4)}·${VZ.fmt(fp.a1[1])}`, bp.gW2[1][0])}
+      ${g('b₂', `δ₂`, bp.gb2)}
+      ${g('δ₁(h₁)', `δ₂·W₂₁·σ'(z₁₁) = ${VZ.fmt(bp.dz1[0],4)}`, bp.dz1[0])}
+      ${g('δ₁(h₂)', `δ₂·W₂₂·σ'(z₁₂) = ${VZ.fmt(bp.dz1[1],4)}`, bp.dz1[1])}
+      ${g('W₁[x₁→h₁]', `δ₁(h₁)·x₁ = ${VZ.fmt(bp.dz1[0],4)}·${VZ.fmt(X[0])}`, bp.gW1[0][0])}
+      ${g('W₁[x₁→h₂]', `δ₁(h₂)·x₁ = ${VZ.fmt(bp.dz1[1],4)}·${VZ.fmt(X[0])}`, bp.gW1[0][1])}
+      ${g('W₁[x₂→h₁]', `δ₁(h₁)·x₂ = ${VZ.fmt(bp.dz1[0],4)}·${VZ.fmt(X[1])}`, bp.gW1[1][0])}
+      ${g('W₁[x₂→h₂]', `δ₁(h₂)·x₂ = ${VZ.fmt(bp.dz1[1],4)}·${VZ.fmt(X[1])}`, bp.gW1[1][1])}
+    </table>`;
+})();
+
+// ---------- STEP 3 : update ----------
+(function(){
+  let W1,b1,W2,b2,epoch,history,timer=null;
+  function reset(){
+    W1=W1_INIT.map(r=>r.slice()); b1=B1_INIT.slice();
+    W2=W2_INIT.map(r=>r.slice()); b2=B2_INIT;
+    epoch=0; history=[forward(W1,b1,W2,b2).loss];
+    render();
+  }
+  function step(){
+    const fp=forward(W1,b1,W2,b2);
+    const bp=backward(W1,W2,fp);
+    const lr=+document.getElementById('lr').value;
+    // immutable-style new weights
+    const nW1=[[W1[0][0]-lr*bp.gW1[0][0], W1[0][1]-lr*bp.gW1[0][1]],
+               [W1[1][0]-lr*bp.gW1[1][0], W1[1][1]-lr*bp.gW1[1][1]]];
+    const nb1=[b1[0]-lr*bp.gb1[0], b1[1]-lr*bp.gb1[1]];
+    const nW2=[[W2[0][0]-lr*bp.gW2[0][0]],[W2[1][0]-lr*bp.gW2[1][0]]];
+    const nb2=b2-lr*bp.gb2;
+    W1=nW1; b1=nb1; W2=nW2; b2=nb2; epoch++;
+    history=[...history, forward(W1,b1,W2,b2).loss];
+    if(history.length>120) history=history.slice(-120);
+    render();
+  }
+  function drawLoss(){
+    const svg=document.getElementById('lossSvg');
+    const E=(x,p)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',x);for(const k in p)e.setAttribute(k,p[k]);return e;};
+    svg.innerHTML='';
+    const W=320,H=180,pad=28;
+    const n=history.length, maxL=Math.max(...history,0.001), minL=0;
+    const sx=i=> n<2 ? pad : pad+i/(n-1)*(W-2*pad);
+    const sy=v=> H-pad-(v-minL)/(maxL-minL||1)*(H-2*pad);
+    svg.appendChild(E('line',{x1:pad,y1:H-pad,x2:W-pad,y2:H-pad,class:'axis'}));
+    svg.appendChild(E('line',{x1:pad,y1:pad,x2:pad,y2:H-pad,class:'axis'}));
+    let d='';
+    history.forEach((v,i)=>{d+=(i?'L':'M')+sx(i).toFixed(1)+','+sy(v).toFixed(1)+' ';});
+    svg.appendChild(E('path',{d,fill:'none',stroke:'var(--good)','stroke-width':2}));
+    if(n){const last=history[n-1];svg.appendChild(E('circle',{cx:sx(n-1),cy:sy(last),r:4,fill:'var(--good)'}));}
+    const t=E('text',{x:pad,y:18,fill:'var(--muted)','font-size':10,'font-family':'JetBrains Mono'});t.textContent='loss max '+VZ.fmt(maxL,4);svg.appendChild(t);
+  }
+  function render(){
+    const fp=forward(W1,b1,W2,b2);
+    document.getElementById('epochv').textContent='epoch '+epoch;
+    document.getElementById('predBars').innerHTML =
+      VZ.barRow('정답 y', TARGET, {color:'var(--good)', pctText:VZ.fmt(TARGET)}) +
+      VZ.barRow('예측 ŷ', fp.yhat, {win:false, color:'var(--q)', pctText:VZ.fmt(fp.yhat)}) +
+      `<p class="note" style="margin-top:10px">손실 L = <b style="color:var(--k)">${VZ.fmt(fp.loss,4)}</b> · |오차| = ${VZ.fmt(Math.abs(fp.yhat-TARGET),4)}</p>`;
+    const w1M=VZ.mxMatrix(W1,{acc:'var(--q)',title:'W₁',colLabs:['h₁','h₂'],rowLabs:['x₁','x₂'],shape:'[2×2]'});
+    const w2M=VZ.mxMatrix(W2,{acc:'var(--q)',title:'W₂',colLabs:['ŷ'],rowLabs:['h₁','h₂'],shape:'[2×1]'});
+    const b1M=VZ.mxMatrix([b1],{acc:'var(--slate)',title:'b₁',shape:'[1×2]'});
+    document.getElementById('weightView').innerHTML = VZ.opRow([w1M,b1M,w2M],['','']);
+    drawLoss();
+  }
+  document.getElementById('lrv').textContent=VZ.fmt(1.5);
+  document.getElementById('lr').addEventListener('input',e=>document.getElementById('lrv').textContent=VZ.fmt(+e.target.value));
+  document.getElementById('stepBtn').addEventListener('click',step);
+  document.getElementById('resetBtn').addEventListener('click',()=>{ if(timer){clearInterval(timer);timer=null;document.getElementById('autoBtn').textContent='⏩ 자동 반복';} reset(); });
+  document.getElementById('autoBtn').addEventListener('click',e=>{
+    if(timer){clearInterval(timer);timer=null;e.target.textContent='⏩ 자동 반복';}
+    else{e.target.textContent='⏸ 멈춤';timer=setInterval(()=>{ step(); if(epoch>=200){clearInterval(timer);timer=null;e.target.textContent='⏩ 자동 반복';} },120);}
+  });
+  reset();
+})();
+</script>
+</body>
+</html>

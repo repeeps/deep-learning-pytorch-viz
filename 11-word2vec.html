@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11 워드 임베딩 Word2Vec · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 3 · NLP BASICS</div>
+    <h1>Word2Vec — 단어를 의미의 좌표로</h1>
+    <p class="intro">컴퓨터는 단어를 숫자로만 다룹니다. 가장 단순한 방법인 <b>원-핫 인코딩</b>은 단어 사이의 <b>의미·유사도</b>를 전혀 담지 못해요. <b>Word2Vec</b>은 "비슷한 맥락에 등장하는 단어는 의미도 비슷하다"는 <b>분포 가설</b>을 이용해, 단어를 의미가 녹아든 <b>조밀한 벡터(임베딩)</b>로 학습합니다. 그러면 <code class="mono">왕 - 남자 + 여자 ≈ 여왕</code> 같은 벡터 산술까지 가능해져요.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 원-핫의 한계</button>
+    <button data-s="1">01 · 분포 가설</button>
+    <button data-s="2">02 · CBOW vs Skip-gram</button>
+    <button data-s="3">03 · 임베딩 공간</button>
+  </nav>
+
+  <!-- STEP 0 : 원-핫의 한계 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — One-hot Encoding</span>
+    <h2>원-핫: 거대하고 텅 빈 벡터</h2>
+    <p class="lead">어휘 사전에 단어가 <b>V개</b> 있으면, 각 단어는 자기 자리만 <b>1</b>이고 나머지는 전부 <b>0</b>인 <b>V차원 벡터</b>가 됩니다. 어휘가 수만 개면 벡터도 수만 차원이에요.</p>
+    <div class="mx-op-row" id="oneHotRow"></div>
+    <div class="callout q">
+      <div class="ttl">치명적 한계 — 모든 단어가 서로 직교</div>
+      <p><b>서로 다른</b> 두 원-핫 벡터를 골라 <b>내적(dot product)</b>을 하면 항상 <b>0</b>입니다(같은 단어끼리만 1). 즉 "왕"과 "여왕"의 유사도나 "왕"과 "사과"의 유사도가 <b>똑같이 0</b>이에요. 의미가 전혀 담기지 않습니다.</p>
+      <p>아래에서 두 단어를 골라 유사도(내적)를 직접 계산해 보세요.</p>
+    </div>
+    <div class="row" style="gap:18px">
+      <div>
+        <div class="label">단어 A</div>
+        <select id="ohA" class="mono" style="background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px"></select>
+      </div>
+      <div>
+        <div class="label">단어 B</div>
+        <select id="ohB" class="mono" style="background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px"></select>
+      </div>
+    </div>
+    <div id="ohSim" class="note" style="margin-top:14px"></div>
+  </section>
+
+  <!-- STEP 1 : 분포 가설 -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Distributional Hypothesis</span>
+    <h2>분포 가설 — 맥락이 의미를 만든다</h2>
+    <p class="lead">"<b>비슷한 맥락에 나오는 단어는 의미도 비슷하다.</b>" 그래서 Word2Vec은 문장 위에서 <b>윈도우</b>를 슬라이딩하며 <b>(중심 단어, 주변 단어)</b> 학습쌍을 뽑아냅니다. 중심 단어 기준 <b>±2칸</b>을 윈도우로 봅니다.</p>
+    <div class="ctrl">
+      <button class="btn" id="winPrev">◀ 이전</button>
+      <button class="btn" id="winNext">다음 ▶</button>
+      <span class="val" id="winPos"></span>
+    </div>
+    <div class="chart-wrap">
+      <div id="sentRow" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    </div>
+    <div class="label" style="margin-top:18px">이 위치에서 추출되는 학습쌍 (중심 → 주변)</div>
+    <div id="pairView" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    <p class="note" style="margin-top:16px">→ <span class="tagchip q">중심</span> 단어와 윈도우 안의 <span class="tagchip v">주변</span> 단어가 짝을 이뤄요. 윈도우를 끝까지 밀면 문장 전체에서 수많은 쌍이 나오고, 모델은 이 쌍들을 학습해 임베딩을 만듭니다.</p>
+  </section>
+
+  <!-- STEP 2 : CBOW vs Skip-gram -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — CBOW vs Skip-gram</span>
+    <h2>두 가지 학습 구조</h2>
+    <p class="lead">같은 (중심, 주변) 쌍을 두고, <b>무엇으로 무엇을 예측하느냐</b>가 다릅니다. <b>CBOW</b>는 주변으로 중심을, <b>Skip-gram</b>은 중심으로 주변을 예측해요.</p>
+    <div class="grid3" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+      <div class="card">
+        <h4 style="color:var(--q)">CBOW (주변 → 중심)</h4>
+        <div id="cbowSvg"></div>
+        <p class="note" style="margin-top:10px">여러 <b>주변 단어</b>를 평균해 가운데 빠진 <b>중심 단어</b>를 맞혀요. 학습이 빠르고 <b>빈번한 단어</b>에 유리해요.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--v)">Skip-gram (중심 → 주변)</h4>
+        <div id="skipSvg"></div>
+        <p class="note" style="margin-top:10px">하나의 <b>중심 단어</b>로 여러 <b>주변 단어</b>를 예측해요. 느리지만 <b>적은 데이터·희귀 단어</b>에서 표현이 더 좋아요.</p>
+      </div>
+    </div>
+    <div class="callout v">
+      <div class="ttl">핵심은 "은닉층"</div>
+      <p>두 구조 모두 가운데 작은 <b>은닉층(예: 300차원)</b>을 통과합니다. 학습이 끝나면 이 은닉층으로 가는 <b>가중치 행렬의 각 행</b>이 바로 우리가 원하는 <b>단어 임베딩 벡터</b>가 돼요.</p>
+    </div>
+  </section>
+
+  <!-- STEP 3 : 임베딩 공간 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — Embedding Space</span>
+    <h2>의미가 좌표가 된 공간, 그리고 벡터 산술</h2>
+    <p class="lead">학습이 끝나면 단어들은 의미에 따라 공간에 배치됩니다. <b>비슷한 단어는 가까이</b> 모이고, 단어 사이의 <b>방향(차이 벡터)</b>이 일정한 의미를 가져요. 그래서 <code class="mono">왕 - 남자 + 여자</code>를 계산하면 <b>여왕</b> 근처에 도착합니다.</p>
+    <div class="callout q">
+      <div class="ttl">정직하게 — 좌표는 미리 학습된 값을 가정</div>
+      <p>실제 Word2Vec 학습은 거대한 말뭉치가 필요하므로 이 페이지에선 불가능해요. 그래서 아래 2D 좌표는 <b>"이미 학습됐다고 가정한" 하드코딩 값</b>입니다. 다만 <code>A - B + C</code> 벡터 산술과 그 <b>최근접 단어 찾기는 JS로 실제 계산</b>합니다.</p>
+    </div>
+    <div class="row" style="gap:14px;margin-bottom:6px">
+      <span class="mono" style="font-size:14px">산술:</span>
+      <select id="wA" class="mono pick"></select>
+      <span class="op">−</span>
+      <select id="wB" class="mono pick"></select>
+      <span class="op">+</span>
+      <select id="wC" class="mono pick"></select>
+      <span class="op">≈</span>
+      <span class="val" id="wResult" style="min-width:auto"></span>
+    </div>
+    <div class="chart-wrap">
+      <div id="embScatter"></div>
+    </div>
+    <div id="arithDetail" class="note" style="margin-top:14px"></div>
+    <p class="note" style="margin-top:10px">→ <span class="tagchip q">A</span><span class="tagchip k">B</span> 를 빼고 <span class="tagchip v">C</span> 를 더한 <b style="color:var(--hot)">★ 결과 지점</b>에서 가장 가까운 실제 단어를 <b style="color:var(--good)">초록</b>으로 강조했어요. 이게 바로 "유추(analogy)" 능력입니다.</p>
+  </section>
+
+  <p class="foot">// 임베딩 좌표는 학습됐다고 가정한 하드코딩 값. 벡터 산술·유사도·최근접 단어는 브라우저에서 실제 계산. · <a href="index.html">목차</a></p>
+</div>
+
+<style>
+  select.pick{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px;}
+  #wResult{color:var(--good);font-weight:700;font-size:16px;font-family:'JetBrains Mono',monospace;}
+  .sent-tok{font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 12px;border-radius:9px;
+    background:var(--panel);border:1px solid var(--line);color:var(--muted);transition:.2s;}
+  .sent-tok.win{background:rgba(192,132,252,.12);border-color:var(--v);color:var(--v);}
+  .sent-tok.center{background:var(--q);border-color:var(--q);color:#04121f;font-weight:700;}
+  .pair-chip{font-family:'JetBrains Mono',monospace;font-size:12px;padding:7px 11px;border-radius:9px;
+    background:var(--panel-2);border:1px solid rgba(192,132,252,.3);color:var(--ink);}
+  .pair-chip b{color:var(--q);} .pair-chip i{color:var(--v);font-style:normal;}
+</style>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '11 · Word2Vec');
+VZ.setupStepper();
+
+// ---------- STEP 0 : 원-핫의 한계 ----------
+(function(){
+  const vocab = ['왕','여왕','남자','여자','사과'];
+  const V = vocab.length;
+  // 원-핫 행렬: i번째 단어 = i번째만 1
+  const oneHot = vocab.map((_,i)=> vocab.map((_,j)=> i===j?1:0));
+
+  document.getElementById('oneHotRow').innerHTML = VZ.mxMatrix(oneHot,{
+    acc:'var(--q)', title:'원-핫 인코딩 (어휘 5개)',
+    rowLabs: vocab, colLabs: vocab.map(w=>w.slice(0,2)),
+    shape:`[5×5]`, zeroDim:true
+  });
+
+  const selA = document.getElementById('ohA');
+  const selB = document.getElementById('ohB');
+  vocab.forEach((w,i)=>{
+    selA.insertAdjacentHTML('beforeend',`<option value="${i}">${w}</option>`);
+    selB.insertAdjacentHTML('beforeend',`<option value="${i}">${w}</option>`);
+  });
+  selA.value = '0'; selB.value = '1';
+
+  function calc(){
+    const i = +selA.value, j = +selB.value;
+    const sim = VZ.dot(oneHot[i], oneHot[j]); // 내적
+    const same = i===j;
+    const vecHtml = (idx,cls)=>`<span class="mono" style="color:var(--${cls})">[${oneHot[idx].join(', ')}]</span>`;
+    document.getElementById('ohSim').innerHTML =
+      `<b style="color:var(--q)">${vocab[i]}</b> ${vecHtml(i,'q')} · <b style="color:var(--k)">${vocab[j]}</b> ${vecHtml(j,'k')}<br>`+
+      `내적 유사도 = <b style="color:var(--hot)">${VZ.fmt(sim,0)}</b> &nbsp;→ &nbsp;`+
+      (same
+        ? `같은 단어라서 1 (자기 자신과만 유사). `
+        : `서로 다른 단어는 <b>항상 0</b> — 의미 차이를 구분할 수 없어요.`);
+  }
+  selA.addEventListener('change',calc);
+  selB.addEventListener('change',calc);
+  calc();
+})();
+
+// ---------- STEP 1 : 분포 가설 ----------
+(function(){
+  const sent = ['귀여운','고양이','가','매트','위에','앉아','있다'];
+  const N = sent.length;
+  const WIN = 2;          // ±2
+  let center = 1;         // 시작 중심 인덱스
+
+  const sentRow = document.getElementById('sentRow');
+  const pairView = document.getElementById('pairView');
+  const winPos = document.getElementById('winPos');
+
+  function render(){
+    const lo = Math.max(0, center-WIN);
+    const hi = Math.min(N-1, center+WIN);
+    sentRow.innerHTML = sent.map((tok,i)=>{
+      let cls='sent-tok';
+      if(i===center) cls+=' center';
+      else if(i>=lo && i<=hi) cls+=' win';
+      return `<span class="${cls}">${tok}</span>`;
+    }).join('');
+
+    // 학습쌍: (중심, 주변) — 주변은 윈도우 안에서 중심 제외
+    const pairs=[];
+    for(let i=lo;i<=hi;i++){ if(i!==center) pairs.push([sent[center], sent[i]]); }
+    pairView.innerHTML = pairs.map(([c,ctx])=>
+      `<span class="pair-chip">(<b>${c}</b>, <i>${ctx}</i>)</span>`).join('');
+    winPos.textContent = `중심 ${center+1}/${N}`;
+  }
+
+  document.getElementById('winPrev').addEventListener('click',()=>{
+    center = (center - 1 + N) % N; render();
+  });
+  document.getElementById('winNext').addEventListener('click',()=>{
+    center = (center + 1) % N; render();
+  });
+  render();
+})();
+
+// ---------- STEP 2 : CBOW vs Skip-gram ----------
+(function(){
+  // 간단한 신경망 다이어그램 빌더 (입력 노드들 → 은닉 1개 → 출력 노드들)
+  function netSvg({inputs, outputs, inColor, outColor, hidLabel}){
+    const W=260, H=210, midY=H/2;
+    const inX=34, hidX=W/2, outX=W-34;
+    const place=(n)=> n===1 ? [midY] : Array.from({length:n},(_,i)=> 40 + i*( (H-80)/(n-1) ));
+    const inY=place(inputs.length), outY=place(outputs.length);
+    let edges='', nodes='', labels='';
+    // 입력 → 은닉
+    inY.forEach(y=>{ edges += `<line x1="${inX}" y1="${y}" x2="${hidX}" y2="${midY}" stroke="${inColor}" stroke-opacity=".5" stroke-width="1.3"/>`; });
+    // 은닉 → 출력
+    outY.forEach(y=>{ edges += `<line x1="${hidX}" y1="${midY}" x2="${outX}" y2="${y}" stroke="${outColor}" stroke-opacity=".5" stroke-width="1.3"/>`; });
+    inputs.forEach((t,i)=>{
+      nodes += `<circle cx="${inX}" cy="${inY[i]}" r="14" fill="rgba(55,189,248,.15)" stroke="${inColor}" stroke-width="1.6"/>`;
+      labels += `<text x="${inX}" y="${inY[i]+4}" text-anchor="middle" font-size="9" fill="${inColor}" font-family="JetBrains Mono">${t}</text>`;
+    });
+    // 은닉
+    nodes += `<circle cx="${hidX}" cy="${midY}" r="18" fill="rgba(251,191,36,.15)" stroke="var(--hot)" stroke-width="1.8"/>`;
+    labels += `<text x="${hidX}" y="${midY+4}" text-anchor="middle" font-size="9" fill="var(--hot)" font-family="JetBrains Mono">은닉</text>`;
+    outputs.forEach((t,i)=>{
+      nodes += `<circle cx="${outX}" cy="${outY[i]}" r="14" fill="rgba(192,132,252,.15)" stroke="${outColor}" stroke-width="1.6"/>`;
+      labels += `<text x="${outX}" y="${outY[i]+4}" text-anchor="middle" font-size="9" fill="${outColor}" font-family="JetBrains Mono">${t}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:280px">
+      <text x="${inX}" y="18" text-anchor="middle" class="axislabel">입력</text>
+      <text x="${hidX}" y="18" text-anchor="middle" class="axislabel">${hidLabel}</text>
+      <text x="${outX}" y="18" text-anchor="middle" class="axislabel">출력</text>
+      ${edges}${nodes}${labels}</svg>`;
+  }
+
+  document.getElementById('cbowSvg').innerHTML = netSvg({
+    inputs:['귀여운','고양이','매트','위에'], outputs:['가'],
+    inColor:'var(--q)', outColor:'var(--v)', hidLabel:'h'
+  });
+  document.getElementById('skipSvg').innerHTML = netSvg({
+    inputs:['가'], outputs:['귀여운','고양이','매트','위에'],
+    inColor:'var(--q)', outColor:'var(--v)', hidLabel:'h'
+  });
+})();
+
+// ---------- STEP 3 : 임베딩 공간 ----------
+(function(){
+  // 학습됐다고 "가정"한 2D 좌표 (정규화된 의미 공간, 0~10)
+  // 왕↔여왕 의 차이벡터 ≈ 남자↔여자 의 차이벡터 가 되도록 평행사변형으로 배치
+  const words = {
+    '왕':   [2.0, 8.0],
+    '여왕': [4.0, 8.0],
+    '남자': [2.0, 6.0],
+    '여자': [4.0, 6.0],
+    '왕자': [1.4, 7.4],
+    '공주': [3.4, 7.4],
+    '사과': [8.5, 2.2],
+    '바나나':[7.6, 1.4],
+    '포도': [8.9, 1.1],
+    '오렌지':[7.8, 2.6],
+  };
+  const names = Object.keys(words);
+
+  // ---- 드롭다운 ----
+  const fill = (sel,def)=>{ names.forEach(n=> sel.insertAdjacentHTML('beforeend',`<option value="${n}">${n}</option>`)); sel.value=def; };
+  const wA=document.getElementById('wA'), wB=document.getElementById('wB'), wC=document.getElementById('wC');
+  fill(wA,'왕'); fill(wB,'남자'); fill(wC,'여자');
+
+  // ---- 좌표 → SVG 픽셀 매핑 (산술 결과점도 범위에 포함해 클리핑 방지) ----
+  const W=560, H=360, PAD=34;
+  const xs=names.map(n=>words[n][0]), ys=names.map(n=>words[n][1]);
+  let px, py;
+  function setScale(extra){
+    const ex = extra ? [extra[0]] : [], ey = extra ? [extra[1]] : [];
+    const minX=Math.min(...xs,...ex)-1, maxX=Math.max(...xs,...ex)+1;
+    const minY=Math.min(...ys,...ey)-1, maxY=Math.max(...ys,...ey)+1;
+    px=x=> PAD + (x-minX)/(maxX-minX)*(W-2*PAD);
+    py=y=> H-PAD - (y-minY)/(maxY-minY)*(H-2*PAD); // y축 뒤집기
+  }
+  setScale(null);
+
+  function nearest(vec, exclude){
+    let best=null, bestD=Infinity;
+    names.forEach(n=>{
+      if(exclude.includes(n)) return;
+      const d=Math.hypot(words[n][0]-vec[0], words[n][1]-vec[1]);
+      if(d<bestD){ bestD=d; best=n; }
+    });
+    return {word:best, dist:bestD};
+  }
+
+  function draw(){
+    const a=wA.value, b=wB.value, c=wC.value;
+    // 실제 벡터 산술: A - B + C
+    const res=[ words[a][0]-words[b][0]+words[c][0], words[a][1]-words[b][1]+words[c][1] ];
+    setScale(res); // 결과점이 차트 밖으로 나가지 않게 매핑 갱신
+    // B=C 면 수학적으로 결과는 정확히 A 자신 — 입력 제외 규칙을 풀어 정답을 보여준다
+    const exclude = (b===c) ? [] : [a,b,c];
+    const near=nearest(res, exclude);
+
+    document.getElementById('wResult').textContent = near.word;
+
+    let g='';
+    // 격자
+    g += `<line class="axis" x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}"/>`;
+    g += `<line class="axis" x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H-PAD}"/>`;
+    g += `<text class="axislabel" x="${W-PAD}" y="${H-PAD+16}" text-anchor="end">의미 축 1 →</text>`;
+    g += `<text class="axislabel" x="${PAD-6}" y="${PAD-8}" text-anchor="start">↑ 의미 축 2</text>`;
+
+    // 산술 화살표: A → (A-B) → (+C) 를 시각화하기 위해 A→res 점선
+    g += `<line x1="${px(words[a][0])}" y1="${py(words[a][1])}" x2="${px(res[0])}" y2="${py(res[1])}" stroke="var(--hot)" stroke-width="1.6" stroke-dasharray="5 4" opacity=".8"/>`;
+
+    // 결과 지점 ★
+    g += `<text x="${px(res[0])}" y="${py(res[1])+6}" text-anchor="middle" font-size="22" fill="var(--hot)">★</text>`;
+    g += `<text x="${px(res[0])}" y="${py(res[1])-16}" text-anchor="middle" font-size="10" fill="var(--hot)" font-family="JetBrains Mono">결과</text>`;
+
+    // 단어 점들
+    names.forEach(n=>{
+      const isInput = (n===a||n===b||n===c);
+      const isNear = (n===near.word);
+      let color='var(--slate)', r=6;
+      if(n===a){ color='var(--q)'; r=7; }
+      else if(n===b){ color='var(--k)'; r=7; }
+      else if(n===c){ color='var(--v)'; r=7; }
+      if(isNear){ color='var(--good)'; r=9; }
+      g += `<circle cx="${px(words[n][0])}" cy="${py(words[n][1])}" r="${r}" fill="${color}" `+
+           (isNear?`stroke="var(--good)" stroke-width="3" fill-opacity=".9"`:`fill-opacity=".85"`)+`/>`;
+      const lblColor = isNear? 'var(--good)' : (isInput? color : 'var(--muted)');
+      const fw = (isNear||isInput)? '700':'400';
+      g += `<text x="${px(words[n][0])+11}" y="${py(words[n][1])+4}" font-size="12" fill="${lblColor}" font-weight="${fw}" font-family="JetBrains Mono">${n}</text>`;
+    });
+
+    document.getElementById('embScatter').innerHTML =
+      `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${g}</svg>`;
+
+    document.getElementById('arithDetail').innerHTML =
+      `<b style="color:var(--q)">${a}</b>(${VZ.fmt(words[a][0],1)}, ${VZ.fmt(words[a][1],1)}) `+
+      `− <b style="color:var(--k)">${b}</b>(${VZ.fmt(words[b][0],1)}, ${VZ.fmt(words[b][1],1)}) `+
+      `+ <b style="color:var(--v)">${c}</b>(${VZ.fmt(words[c][0],1)}, ${VZ.fmt(words[c][1],1)}) `+
+      `= <b style="color:var(--hot)">★(${VZ.fmt(res[0],1)}, ${VZ.fmt(res[1],1)})</b><br>`+
+      `이 결과 지점에서 가장 가까운 단어 → <b style="color:var(--good)">${near.word}</b> (거리 ${VZ.fmt(near.dist,2)})`;
+  }
+
+  [wA,wB,wC].forEach(s=>s.addEventListener('change',draw));
+  draw();
+})();
+</script>
+</body>
+</html>

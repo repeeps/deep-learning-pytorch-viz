@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>18 사전훈련 LM · BERT/GPT · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+/* ---- 이 페이지 전용 보조 스타일 ---- */
+.sent{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 18px;}
+.sent .tok{padding:9px 15px; border-radius:11px; border:1px solid var(--line); background:var(--panel-2);
+  font-weight:700; font-size:17px; transition:.25s;}
+.sent .tok.mask{border-color:var(--hot); background:rgba(251,191,36,.12); color:var(--hot);
+  box-shadow:0 0 18px rgba(251,191,36,.18); font-family:'JetBrains Mono',monospace;}
+.sent .tok.ctx{border-color:rgba(55,189,248,.45); color:var(--q);}
+.cand{cursor:pointer; border-radius:10px; transition:.15s; padding:2px 6px; margin:0 -6px;}
+.cand:hover{background:rgba(255,255,255,.04);}
+.gpt-hist{font-size:13px; color:var(--muted); margin:6px 0 14px; font-family:'JetBrains Mono',monospace;}
+.cmp td, .cmp th{text-align:left !important;}
+.cmp td:first-child{color:var(--muted); font-weight:700;}
+.cmp .bert{color:var(--q);} .cmp .gpt{color:var(--good);}
+/* 파인튜닝 층 도식 */
+.ft-stack{display:flex; flex-direction:column-reverse; gap:0; margin-top:14px; max-width:560px;}
+.ft-layer{display:flex; align-items:center; gap:14px; padding:13px 18px; border-radius:12px; margin:4px 0;
+  border:1px solid var(--line); background:var(--panel-2); transition:.3s;}
+.ft-layer .lv{font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; min-width:138px;}
+.ft-layer .ld{font-size:13.5px; color:var(--muted);}
+.ft-layer.frozen{border-color:rgba(96,165,250,.45); background:rgba(96,165,250,.06);}
+.ft-layer.frozen .lv{color:var(--blue);}
+.ft-layer.tuned{border-color:rgba(192,132,252,.5); background:rgba(192,132,252,.07);}
+.ft-layer.tuned .lv{color:var(--v);}
+.ft-layer.newhead{border-color:var(--hot); background:rgba(251,191,36,.10);}
+.ft-layer.newhead .lv{color:var(--hot);}
+.ft-up{text-align:center; color:var(--faint); font-size:12px; margin:1px 0; max-width:560px;}
+.ft-legend{display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; font-size:13px; color:var(--muted);}
+.ft-legend .sw{display:inline-block; width:13px; height:13px; border-radius:4px; margin-right:6px; vertical-align:-2px;}
+/* Step0 비교 도식 */
+.pf-flow{display:grid; grid-template-columns:1fr auto 1fr; gap:14px; align-items:stretch; margin-top:8px;}
+@media (max-width:640px){.pf-flow{grid-template-columns:1fr;}}
+.pf-flow .stage{background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:18px;}
+.pf-flow .stage.pre{border-color:rgba(55,189,248,.35);}
+.pf-flow .stage.ft{border-color:rgba(52,211,153,.35);}
+.pf-flow .stage h4{margin:0 0 8px; font-size:15px;}
+.pf-flow .stage.pre h4{color:var(--q);} .pf-flow .stage.ft h4{color:var(--good);}
+.pf-flow .stage ul{margin:0; padding-left:18px; font-size:13.5px; color:var(--muted); line-height:1.8;}
+.pf-flow .stage ul b{color:var(--ink);}
+.pf-arrow{display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--faint); font-weight:700;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 6 · LLM</div>
+    <h1>사전훈련 언어모델 — 먼저 언어를 배우고, 나중에 일을 배운다</h1>
+    <p class="intro">트랜스포머(ch17) 위에 세워진 <b>BERT</b>와 <b>GPT</b>는 거대한 텍스트로 <b>언어 자체</b>를 미리 배워둡니다(사전훈련). 그다음 소량의 라벨 데이터로 원하는 작업에 적응시키죠(파인튜닝). 빈칸 맞추기와 다음 단어 잇기를 직접 눌러보면서 두 모델의 차이를 체감해 봅시다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 사전훈련→파인튜닝</button>
+    <button data-s="1">01 · BERT 빈칸 맞추기</button>
+    <button data-s="2">02 · GPT 다음 단어 잇기</button>
+    <button data-s="3">03 · 파인튜닝</button>
+  </nav>
+
+  <!-- STEP 0 : 패러다임 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Pretrain → Fine-tune</span>
+    <h2>두 단계 학습: 언어를 배우고 → 작업에 적응한다</h2>
+    <p class="lead">예전에는 작업(감성분석, 번역…)마다 모델을 <b>처음부터</b> 학습했어요. 지금은 거대한 코퍼스로 언어 자체를 배운 모델을 가져와 <b>소량의 라벨 데이터로 다듬기만</b> 합니다.</p>
+
+    <div class="callout q">
+      <div class="ttl">비유: 외국어 원어민 채용 vs 신생아 교육</div>
+      <p>회사에 한국어 상담원이 필요하다고 해봅시다. <b>신생아를 데려와 한국어부터 가르치는 것</b>(처음부터 학습)과, <b>이미 한국어가 유창한 사람을 뽑아 상담 업무만 가르치는 것</b>(사전훈련 모델 + 파인튜닝). 어느 쪽이 빠를까요? 당연히 후자죠. 사전훈련 모델은 이미 문법·어휘·상식을 갖춘 "원어민"입니다.</p>
+    </div>
+
+    <div class="pf-flow">
+      <div class="stage pre">
+        <h4>1단계 · 사전훈련 (Pre-training)</h4>
+        <ul>
+          <li>데이터: <b>위키·책·웹 수십억 단어</b> — 라벨 없음(비지도)</li>
+          <li>과제: 빈칸 맞추기(BERT) / 다음 단어 예측(GPT)</li>
+          <li>배우는 것: <b>문법, 어휘, 세상 지식</b></li>
+          <li>비용: GPU 수백~수천 대, 수주~수개월</li>
+        </ul>
+      </div>
+      <div class="pf-arrow">→</div>
+      <div class="stage ft">
+        <h4>2단계 · 파인튜닝 (Fine-tuning)</h4>
+        <ul>
+          <li>데이터: <b>라벨 달린 수백~수만 문장</b>(지도)</li>
+          <li>과제: 감성분석, NER, QA… 내 작업</li>
+          <li>배우는 것: <b>작업 요령</b>만 (언어는 이미 안다)</li>
+          <li>비용: GPU 1대로 몇 시간이면 충분</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="sub" style="margin-top:24px">데이터 양 비교 (라벨 작업이 비싼 게 핵심)</p>
+    <div id="dataCompare"></div>
+    <p class="note" style="margin-top:10px">→ 라벨 없는 텍스트는 인터넷에 사실상 무한합니다. 사전훈련은 이 <b>공짜 데이터</b>에서 언어를 배우고, 비싼 라벨 데이터는 <b>마지막 적응에만</b> 아껴 씁니다. 이 분업이 사전훈련 패러다임의 본질이에요.</p>
+  </section>
+
+  <!-- STEP 1 : BERT MLM -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — BERT · Masked LM</span>
+    <h2>BERT: 문장에 구멍을 뚫고 빈칸을 맞춘다 (MLM)</h2>
+    <p class="lead">BERT의 사전훈련 과제는 단어 일부를 <b>[MASK]</b>로 가리고 원래 단어를 맞추는 것. 정답을 맞추려면 <b>앞뒤 문맥을 모두</b> 읽어야 하므로, 풀다 보면 언어 이해력이 저절로 생깁니다.</p>
+
+    <div class="label">[MASK] 위치 선택 — 어디를 가릴까요?</div>
+    <div class="view-toggle" id="maskBtns"></div>
+
+    <div class="sent" id="mlmSent"></div>
+
+    <div class="label" id="mlmLabel"></div>
+    <div id="mlmBars"></div>
+
+    <p class="note" style="margin-top:16px" id="mlmNote"></p>
+
+    <div class="callout q" style="margin-top:20px">
+      <div class="ttl">양방향(Bidirectional)이 BERT의 무기</div>
+      <p>빈칸 앞의 <b style="color:var(--q)">"나는"</b>과 뒤의 <b style="color:var(--q)">"를 먹었다"</b>를 <b>동시에</b> 봐야 "먹을 수 있는 것"으로 후보가 좁혀집니다. GPT처럼 왼쪽만 보면 "나는" 다음엔 무엇이든 올 수 있어서 훨씬 막막하죠. 그래서 BERT는 <b>문장 이해(분류, 추출)</b>에 강합니다.</p>
+      <p>덤으로 BERT는 <b>NSP</b>(Next Sentence Prediction: 두 문장이 실제로 이어지는 쌍인지 맞추기)도 함께 풀며 문장 사이의 관계 감각을 익혔어요.</p>
+    </div>
+  </section>
+
+  <!-- STEP 2 : GPT -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--good)">Step 02 — GPT · Next Token</span>
+    <h2>GPT: 다음 단어를 예측하고, 그 위에 또 잇는다 (자기회귀)</h2>
+    <p class="lead">GPT의 사전훈련 과제는 단 하나 — <b>"다음 단어는?"</b>. 예측한 단어를 문장에 붙이고 다시 다음 단어를 예측합니다. <b>후보 막대를 클릭</b>해서 문장을 직접 이어가 보세요.</p>
+
+    <div class="label">현재 문장 (자기회귀로 자라는 중)</div>
+    <div class="sent" id="gptSent"></div>
+    <div class="gpt-hist" id="gptHist"></div>
+
+    <div class="label" id="gptLabel">다음 토큰 후보 — 클릭하면 문장에 붙어요</div>
+    <div id="gptBars"></div>
+    <div id="gptDone" class="note" style="display:none; margin-top:12px"></div>
+    <div style="margin-top:16px"><button class="btn" id="gptReset">↺ 처음부터 다시</button></div>
+
+    <div class="callout good" style="margin-top:22px">
+      <div class="ttl">단방향(왼→오) + 자기회귀(Autoregressive)</div>
+      <p>GPT는 <b>왼쪽(과거) 토큰만</b> 보고 다음을 예측합니다. 미래를 못 보게 마스킹(causal mask)되어 있죠. 한 토큰을 뽑으면 그걸 입력에 붙여 또 예측 — 이 단순한 루프가 <b>문장 생성</b>의 전부입니다. ChatGPT가 글을 "한 글자씩" 출력하는 이유가 바로 이거예요.</p>
+    </div>
+
+    <p class="sub" style="margin-top:8px">BERT vs GPT 한눈 비교</p>
+    <table class="calc cmp">
+      <thead><tr><th>항목</th><th class="bert">BERT</th><th class="gpt">GPT</th></tr></thead>
+      <tbody>
+        <tr><td>읽는 방향</td><td class="bert">양방향 (앞뒤 다 본다)</td><td class="gpt">단방향 (왼쪽만 본다)</td></tr>
+        <tr><td>사전훈련 과제</td><td class="bert">빈칸 맞추기 (MLM) + NSP</td><td class="gpt">다음 단어 예측</td></tr>
+        <tr><td>트랜스포머에서</td><td class="bert">인코더 쪽 구조</td><td class="gpt">디코더 쪽 구조</td></tr>
+        <tr><td>잘하는 일</td><td class="bert">이해: 분류·NER·QA 추출</td><td class="gpt">생성: 글쓰기·요약·대화</td></tr>
+        <tr><td>대표 후손</td><td class="bert">RoBERTa, KoBERT…</td><td class="gpt">GPT-3/4, ChatGPT…</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- STEP 3 : 파인튜닝 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--v)">Step 03 — Fine-tuning</span>
+    <h2>같은 몸통, 다른 머리 — 작업마다 헤드만 갈아 끼운다</h2>
+    <p class="lead">파인튜닝은 사전훈련된 BERT 몸통 위에 <b>작은 분류 헤드 하나</b>를 얹고, 내 라벨 데이터로 살짝 더 학습하는 것. 문장 전체의 요약 벡터인 <b>[CLS]</b> 토큰 출력이 헤드의 입력이 됩니다.</p>
+
+    <div class="view-toggle" id="ftToggle">
+      <button data-v="tune" class="on">전체 미세조정 (fine-tune)</button>
+      <button data-v="freeze">몸통 동결 (feature-based)</button>
+    </div>
+
+    <div class="ft-stack" id="ftStack"></div>
+    <div class="ft-legend">
+      <span><span class="sw" style="background:rgba(251,191,36,.7)"></span>새로 추가 (랜덤 초기화, 학습 O)</span>
+      <span><span class="sw" style="background:rgba(192,132,252,.7)"></span>사전훈련 가중치 + 미세조정 (학습 O, 작게)</span>
+      <span><span class="sw" style="background:rgba(96,165,250,.7)"></span>사전훈련 가중치 동결 (학습 X)</span>
+    </div>
+    <p class="note" style="margin-top:12px" id="ftNote"></p>
+
+    <p class="sub" style="margin-top:26px">같은 몸통 + 다른 머리 = 다른 작업</p>
+    <div class="grid3">
+      <div class="card">
+        <h4 style="color:var(--q)">감성분석</h4>
+        <p class="note">[CLS] 벡터 → <b>2-클래스 헤드</b> → 긍정/부정. "이 영화 최고" → 긍정 확률.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--good)">개체명 인식 (NER)</h4>
+        <p class="note"><b>토큰마다</b> 헤드를 달아 → 인명/지명/기관… 태그. "철수가 서울에" → 철수=인명, 서울=지명.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--v)">질의응답 (QA)</h4>
+        <p class="note">지문 토큰 위에 <b>시작/끝 위치 헤드</b> → 정답 구간을 지문에서 짚어냄.</p>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px">→ 세 작업 모두 <b>몸통(BERT)은 동일</b>하고 머리(헤드)만 다릅니다. 언어 이해라는 무거운 짐은 사전훈련이 이미 졌고, 헤드는 가볍게 "출력 형식"만 배우면 되니까요.</p>
+
+    <div class="callout v" style="margin-top:8px">
+      <div class="ttl">다음 챕터 예고</div>
+      <p>이 패러다임을 극한까지 키우면 — 모델은 수천억 파라미터, 사전훈련 데이터는 인터넷 전체 — 파인튜닝 없이 <b>프롬프트만으로</b> 작업을 해내는 <b>LLM</b>이 됩니다. ch19(LLM 실전)에서 이어서 봐요.</p>
+    </div>
+  </section>
+
+  <p class="foot">// 후보 단어 점수는 "학습됐다 가정"한 하드코딩 값, softmax 확률 변환은 브라우저에서 실제 계산. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '18 · Pretrained LM');
+VZ.setupStepper();
+
+// ---------- STEP 0 : 데이터 양 비교 ----------
+(function(){
+  // 시각화용 상대 길이(로그 스케일 느낌의 연출값), 텍스트로 실제 규모 표기
+  const rows = [
+    VZ.barRow('사전훈련', 1.0, {color:'var(--q)',  pctText:'수십억 단어 · 라벨 없음(공짜)'}),
+    VZ.barRow('파인튜닝', 0.045, {color:'var(--good)', pctText:'수천~수만 문장 · 라벨 필요(비쌈)'})
+  ];
+  document.getElementById('dataCompare').innerHTML = rows.join('') +
+    '<p class="mx-note">막대 길이는 개념 비교용 연출이에요(실제 비율로 그리면 파인튜닝 막대는 픽셀 1개도 안 됩니다).</p>';
+})();
+
+// ---------- STEP 1 : BERT MLM ----------
+(function(){
+  // 기본 문장: 나는 / ? / 를 / 먹었다 — 가릴 위치별 후보 점수(학습됐다 가정, 하드코딩)
+  const positions = [
+    {
+      btn:'주어 가리기',
+      toks:['[MASK]','는','사과','를','먹었다'], maskIdx:0,
+      cands:[['나',2.1],['철수',1.8],['동생',1.5],['고양이',1.0],['사과',-0.5],['책상',-1.7]],
+      note:'→ 뒤의 <b>"사과를 먹었다"</b>가 보이니 "먹는 주체"로 후보가 좁혀집니다. <b>책상</b>처럼 못 먹는 주어는 확률이 바닥이죠.'
+    },
+    {
+      btn:'목적어 가리기',
+      toks:['나','는','[MASK]','를','먹었다'], maskIdx:2,
+      cands:[['밥',2.3],['사과',2.0],['배',1.6],['약',0.8],['구름',-1.0],['학교',-1.5]],
+      note:'→ 앞의 <b>"나는"</b> + 뒤의 <b>"를 먹었다"</b>를 동시에 봐서 "먹을 수 있는 것"이 위로 올라옵니다. ch17의 "배" 문장과 같은 원리예요.'
+    },
+    {
+      btn:'동사 가리기',
+      toks:['나','는','사과','를','[MASK]'], maskIdx:4,
+      cands:[['먹었다',2.5],['샀다',1.7],['깎았다',1.4],['던졌다',0.3],['마셨다',-0.6],['읽었다',-1.4]],
+      note:'→ <b>"사과를"</b>이라는 목적어가 동사를 강하게 결정합니다. <b>마셨다/읽었다</b>는 사과와 안 어울려 확률이 낮아요.'
+    }
+  ];
+
+  const btns = document.getElementById('maskBtns');
+  btns.innerHTML = positions.map((p,i)=>
+    `<button data-i="${i}" class="${i===1?'on':''}">${p.btn}</button>`).join('');
+
+  function render(i){
+    const p = positions[i];
+    document.getElementById('mlmSent').innerHTML = p.toks.map((t,j)=>
+      `<span class="tok ${j===p.maskIdx?'mask':'ctx'}">${t}</span>`).join('');
+    const scores = p.cands.map(c=>c[1]);
+    const probs = VZ.softmax(scores);           // 실제 softmax 계산
+    const mx = Math.max(...probs);
+    document.getElementById('mlmLabel').textContent =
+      '[MASK] 자리 후보 확률 — 점수(가정) → softmax(실계산), 합 = 100%';
+    document.getElementById('mlmBars').innerHTML = p.cands.map((c,j)=>
+      VZ.barRow(c[0], probs[j], {win:probs[j]===mx})).join('');
+    document.getElementById('mlmNote').innerHTML = p.note;
+  }
+  btns.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    btns.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+    render(+b.dataset.i);
+  });
+  render(1);
+})();
+
+// ---------- STEP 2 : GPT 자기회귀 ----------
+(function(){
+  // 후보 트리 (점수는 학습됐다 가정한 하드코딩, 확률은 softmax 실계산)
+  const end = null;
+  const tree = {
+    cands:[
+      {w:'갔다', s:2.2, next:{
+        cands:[
+          {w:'그리고', s:1.6, next:{
+            cands:[{w:'친구를',s:1.9,next:end},{w:'공부를',s:1.4,next:end},{w:'점심을',s:1.0,next:end},{w:'구름을',s:-0.9,next:end}]
+          }},
+          {w:'거기서', s:1.3, next:{
+            cands:[{w:'친구를',s:2.0,next:end},{w:'선생님을',s:1.3,next:end},{w:'공부를',s:0.9,next:end},{w:'바다를',s:-1.1,next:end}]
+          }},
+          {w:'숙제를', s:0.5, next:{
+            cands:[{w:'냈다',s:2.2,next:end},{w:'했다',s:1.7,next:end},{w:'잊었다',s:0.6,next:end},{w:'먹었다',s:-1.3,next:end}]
+          }},
+          {w:'바다를', s:-1.0, next:{
+            cands:[{w:'그렸다',s:1.2,next:end},{w:'떠올렸다',s:1.0,next:end},{w:'보았다',s:0.7,next:end},{w:'먹었다',s:-1.5,next:end}]
+          }}
+        ]
+      }},
+      {w:'간다', s:1.5, next:{
+        cands:[{w:'매일',s:1.7,next:end},{w:'지금',s:1.3,next:end},{w:'버스로',s:1.0,next:end},{w:'어제',s:-1.2,next:end}]
+      }},
+      {w:'가서', s:1.1, next:{
+        cands:[{w:'공부했다',s:1.8,next:end},{w:'친구를 만났다',s:1.2,next:end},{w:'놀았다',s:1.0,next:end},{w:'잤다',s:-0.4,next:end}]
+      }},
+      {w:'사과를', s:-0.8, next:{
+        cands:[{w:'먹었다',s:1.9,next:end},{w:'샀다',s:1.3,next:end},{w:'던졌다',s:0.2,next:end},{w:'갔다',s:-1.4,next:end}]
+      }}
+    ]
+  };
+
+  const base = ['나는','학교에'];
+  let sentence, node, picks;
+
+  function reset(){
+    sentence = base.slice();      // 새 배열 (원본 불변)
+    node = tree;
+    picks = [];
+    render();
+  }
+
+  function render(){
+    document.getElementById('gptSent').innerHTML =
+      sentence.map((t,i)=>`<span class="tok ${i<base.length?'ctx':'mask'}">${t}</span>`).join('') +
+      (node ? '<span class="tok" style="color:var(--faint)">?</span>' : '');
+    document.getElementById('gptHist').textContent =
+      picks.length ? '선택 경로: ' + base.join(' ') + ' → ' + picks.join(' → ') : '아직 아무것도 선택하지 않았어요.';
+
+    const barsEl = document.getElementById('gptBars');
+    const doneEl = document.getElementById('gptDone');
+    if(!node){
+      barsEl.innerHTML = '';
+      document.getElementById('gptLabel').textContent = '생성 종료';
+      doneEl.style.display = '';
+      doneEl.innerHTML = `데모는 여기까지: <b style="color:var(--good)">"${sentence.join(' ')}"</b> — 실제 GPT는 이 루프를 <b>문장 끝 토큰이 나올 때까지</b> 수백 번 반복합니다. 매번 가장 확률 높은 것만 고르지 않고 확률에 따라 <b>추첨(sampling)</b>하기도 해서, 같은 시작에서 다른 문장이 나올 수 있어요.`;
+      return;
+    }
+    doneEl.style.display = 'none';
+    document.getElementById('gptLabel').textContent =
+      `"${sentence.join(' ')} ___" 다음 토큰 후보 — 클릭하면 문장에 붙어요 (softmax 실계산, 합 = 100%)`;
+    const probs = VZ.softmax(node.cands.map(c=>c.s));   // 실제 softmax 계산
+    const mx = Math.max(...probs);
+    barsEl.innerHTML = node.cands.map((c,i)=>
+      `<div class="cand" data-i="${i}">${VZ.barRow(c.w, probs[i], {win:probs[i]===mx})}</div>`).join('');
+  }
+
+  document.getElementById('gptBars').addEventListener('click',e=>{
+    const el=e.target.closest('.cand'); if(!el || !node)return;
+    const c = node.cands[+el.dataset.i];
+    sentence = [...sentence, c.w];   // 새 배열로 확장 (자기회귀: 출력이 입력으로)
+    picks = [...picks, c.w];
+    node = c.next;
+    render();
+  });
+  document.getElementById('gptReset').addEventListener('click', reset);
+  reset();
+})();
+
+// ---------- STEP 3 : 파인튜닝 도식 ----------
+(function(){
+  const bodyClsByMode = {tune:'tuned', freeze:'frozen'};
+  const noteByMode = {
+    tune:'→ <b>전체 미세조정</b>: 몸통도 아주 작은 학습률로 함께 움직여요. 성능은 보통 이쪽이 더 좋지만, 메모리/계산이 더 듭니다.',
+    freeze:'→ <b>몸통 동결</b>: BERT는 고정된 "문장 → 벡터 변환기"로만 쓰고 헤드만 학습해요. 빠르고 가볍지만 성능은 약간 양보합니다.'
+  };
+
+  function render(mode){
+    const bc = bodyClsByMode[mode];
+    document.getElementById('ftStack').innerHTML = [
+      `<div class="ft-up">↑ 입력: [CLS] 이 영화 정말 최고 [SEP]</div>`,
+      `<div class="ft-layer ${bc}"><span class="lv">BERT Layer 1</span><span class="ld">사전훈련된 어텐션 블록</span></div>`,
+      `<div class="ft-up">↑</div>`,
+      `<div class="ft-layer ${bc}"><span class="lv">BERT Layer 2~11</span><span class="ld">⋯ 사전훈련된 블록 반복 ⋯</span></div>`,
+      `<div class="ft-up">↑</div>`,
+      `<div class="ft-layer ${bc}"><span class="lv">BERT Layer 12</span><span class="ld">→ [CLS] 위치 출력 = 문장 요약 벡터</span></div>`,
+      `<div class="ft-up">↑ [CLS] 벡터 하나만 꺼내서</div>`,
+      `<div class="ft-layer newhead"><span class="lv">분류 헤드 (NEW)</span><span class="ld">선형층 1개 + softmax → 긍정 / 부정</span></div>`
+    ].join('');   // 배열은 입력→헤드 순서, .ft-stack의 column-reverse 가 화면에서 입력을 아래로 뒤집는다
+    document.getElementById('ftNote').innerHTML = noteByMode[mode];
+  }
+
+  document.getElementById('ftToggle').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    document.querySelectorAll('#ftToggle button').forEach(x=>x.classList.toggle('on',x===b));
+    render(b.dataset.v);
+  });
+  render('tune');
+})();
+</script>
+</body>
+</html>

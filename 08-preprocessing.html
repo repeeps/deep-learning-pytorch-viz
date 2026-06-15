@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>08 자연어 전처리 · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  /* 페이지 전용: 토큰 칩 */
+  .tokrow{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 6px; align-items:center;}
+  .tok{font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; padding:7px 12px;
+    border-radius:9px; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+    transition:opacity .45s, transform .45s;}
+  .tok.q{border-color:rgba(55,189,248,.45); color:var(--q); background:rgba(55,189,248,.08);}
+  .tok.hot{border-color:rgba(251,191,36,.55); color:var(--hot); background:rgba(251,191,36,.08);}
+  .tok.kk{border-color:rgba(251,113,133,.45); color:var(--k); background:rgba(251,113,133,.08);}
+  .tok.good{border-color:rgba(52,211,153,.45); color:var(--good); background:rgba(52,211,153,.08);}
+  .tok.removed{color:var(--k); border-color:var(--k); background:rgba(251,113,133,.10); text-decoration:line-through;}
+  .tok.fade{opacity:0; transform:scale(.7);}
+  .tok .gl{font-weight:400; font-size:11px; color:var(--muted); margin-left:6px;}
+  .morph{display:inline-flex; gap:0; align-items:stretch; border-radius:9px; overflow:hidden; border:1px solid rgba(192,132,252,.45);}
+  .morph span{font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; padding:7px 10px;
+    background:rgba(192,132,252,.08); color:var(--v);}
+  .morph span + span{border-left:1px dashed rgba(192,132,252,.45); color:var(--muted);}
+  .pipebtns{display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 14px;}
+  .pipebtns button{font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; padding:9px 14px;
+    border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--muted); cursor:pointer; transition:.2s;}
+  .pipebtns button:hover{border-color:var(--q); color:var(--ink);}
+  .pipebtns button.on{background:var(--q); color:#04121f; border-color:var(--q);}
+  .pipebtns button.done{border-color:rgba(52,211,153,.5); color:var(--good);}
+  .dict{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0;}
+  .dict .pair{font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; padding:6px 10px;
+    border-radius:8px; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);}
+  .dict .pair b{color:var(--hot); font-weight:700;}
+  .sentlab{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-top:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 3 · NLP BASICS</div>
+    <h1>자연어 전처리 — 문장이 숫자가 되기까지</h1>
+    <p class="intro">모델은 글자를 읽지 못해요. 문장을 <b>토큰화 → 정제 → 정수 인코딩 → 패딩</b> 순서로 가공해야 비로소 <b>텐서</b>가 되어 모델에 들어갑니다. 각 단계에서 데이터가 실제로 어떻게 변하는지 눈으로 따라가 봅시다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 토큰화</button>
+    <button data-s="1">01 · 정제·불용어</button>
+    <button data-s="2">02 · 정수 인코딩</button>
+    <button data-s="3">03 · 패딩</button>
+  </nav>
+
+  <!-- STEP 0 : 토큰화 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Tokenization</span>
+    <h2>문장을 자르는 단위, 토큰</h2>
+    <p class="lead">가장 단순한 방법은 <b>공백(띄어쓰기) 기준 분리</b>입니다. 영어에서는 꽤 잘 통하지만, 한국어에서는 문제가 생겨요.</p>
+
+    <div class="card" style="margin-bottom:14px">
+      <h4 style="color:var(--q)">영어 — 공백 분리로 충분한 편</h4>
+      <p class="label mono" id="enRaw"></p>
+      <div class="tokrow" id="enToks"></div>
+      <p class="note" id="enNote"></p>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h4 style="color:var(--k)">한국어 — 공백 분리의 함정</h4>
+      <p class="label mono" id="koRaw"></p>
+      <div class="tokrow" id="koToks"></div>
+      <p class="note" id="koNote"></p>
+    </div>
+
+    <div class="callout v">
+      <div class="ttl">해결책: 형태소 분리</div>
+      <p>한국어는 <b>교착어</b>라 단어 뒤에 조사가 붙어요. <code>사과를</code>·<code>사과가</code>를 통째로 보면 "다른 단어"가 되지만, 형태소 단위로 쪼개면 <code>사과</code>라는 같은 토큰을 공유합니다.</p>
+      <div class="tokrow" id="koMorph"></div>
+      <p class="note" id="morphNote" style="margin-top:8px"></p>
+      <p class="note" style="margin-top:10px;color:var(--faint)">※ 형태소 경계·기본형 복원은 분석기(Mecab·Okt·꼬꼬마 등)와 설정마다 결과가 달라요. 위 분해는 <b>표면형 기준의 단순화 예시</b>이고(예: <code>먹었는데</code>=먹/었/는데, <code>달았다</code>=형용사 '달다'의 활용), 핵심은 "조사를 떼면 <code>사과</code>가 같은 토큰으로 묶인다"는 점입니다.</p>
+    </div>
+  </section>
+
+  <!-- STEP 1 : 정제/정규화/불용어 -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Cleaning · Normalization · Stopwords</span>
+    <h2>노이즈를 걷어내는 파이프라인</h2>
+    <p class="lead">같은 단어가 <b>대문자/구두점</b> 때문에 다른 토큰으로 세어지면 안 돼요. 또 <b>불용어(stopword)</b>처럼 의미 기여가 적은 단어는 지웁니다. 버튼을 차례로 눌러보세요.</p>
+
+    <div class="label mono">원본 문장</div>
+    <p class="label mono" id="dirtyRaw" style="color:var(--ink); font-size:13px"></p>
+
+    <div class="pipebtns" id="pipeBtns">
+      <button data-st="0" class="on">⓪ 원본 토큰</button>
+      <button data-st="1">① 소문자화</button>
+      <button data-st="2">② 구두점 제거</button>
+      <button data-st="3">③ 불용어 제거</button>
+    </div>
+
+    <div class="tokrow" id="pipeToks"></div>
+    <p class="note" id="pipeNote" style="margin-top:10px"></p>
+
+    <div class="callout q" style="margin-top:18px">
+      <div class="ttl">왜 이렇게까지?</div>
+      <p><code>The</code>와 <code>the</code>가 다른 단어로 세어지면 단어 사전이 쓸데없이 커지고, 빈도 통계가 갈라져요. 정제는 <b>단어 사전을 작고 단단하게</b> 만드는 작업입니다. 다음 단계(정수 인코딩)의 품질이 여기서 결정돼요.</p>
+    </div>
+  </section>
+
+  <!-- STEP 2 : 정수 인코딩 -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — Integer Encoding</span>
+    <h2>단어마다 번호표 달기</h2>
+    <p class="lead">정제가 끝난 코퍼스에서 <b>단어 빈도</b>를 세고, <b>빈도순으로 정렬</b>해 인덱스를 부여합니다. 자주 나오는 단어일수록 작은 번호를 받아요.</p>
+
+    <p class="sub">① 정제된 코퍼스 (3문장)</p>
+    <div id="corpusView"></div>
+
+    <p class="sub" style="margin-top:22px">② 단어 빈도 → 빈도순 정렬</p>
+    <table class="calc"><thead><tr><th>단어</th><th>빈도</th><th style="text-align:left">분포</th><th>인덱스</th></tr></thead>
+      <tbody id="freqBody"></tbody></table>
+    <p class="note" style="margin-top:8px">→ 인덱스 <b>0은 비워둡니다</b> — 다음 단계 <b>패딩</b> 전용 번호예요.</p>
+
+    <p class="sub" style="margin-top:22px">③ 단어 → 인덱스 사전 (vocab)</p>
+    <div class="dict" id="dictView"></div>
+
+    <p class="sub" style="margin-top:22px">④ 문장 → 숫자 배열</p>
+    <div id="encodedView"></div>
+    <p class="note" style="margin-top:10px">→ 문장마다 <b>길이가 다른</b> 숫자 배열이 나왔어요. 이대로는 하나의 행렬로 못 묶습니다. 그래서 다음 단계가 필요해요.</p>
+  </section>
+
+  <!-- STEP 3 : 패딩 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — Padding</span>
+    <h2>길이를 맞춰 행렬로 — 드디어 텐서!</h2>
+    <p class="lead">가장 긴 문장 길이(<b id="maxLenLab"></b>)에 맞춰 빈 자리를 <b>0</b>으로 채웁니다. 0이 어느 쪽에 붙을지 골라보세요.</p>
+
+    <div class="view-toggle" id="padToggle">
+      <button data-v="post" class="on">뒤 패딩 (post)</button>
+      <button data-v="pre">앞 패딩 (pre)</button>
+    </div>
+
+    <div class="mx-op-row" id="padBefore"></div>
+    <div class="arrow-v">↓ 0으로 채워 길이 통일 ↓</div>
+    <div class="mx-op-row" id="padAfter"></div>
+
+    <div class="callout good" style="margin-top:20px">
+      <div class="ttl">이제 텐서가 되었어요</div>
+      <p>길이가 제각각이던 문장 3개가 <b id="finalShape"></b> 행렬, 즉 <b>rank 2 텐서</b>가 됐습니다. <a href="01-tensor.html" style="color:var(--good)">CH 01</a>에서 본 그 텐서예요 — 이제 임베딩 층을 거쳐 모델에 그대로 들어갈 수 있습니다.</p>
+      <div class="formula">문장(텍스트) → 토큰화 → 정제 → 정수 인코딩 → 패딩 → tensor<span id="shapeTail"></span></div>
+    </div>
+  </section>
+
+  <p class="foot">// 모든 변환은 브라우저에서 실제 계산 (형태소 분리만 예시). 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '08 · Preprocess');
+VZ.setupStepper();
+
+// ============ 공통: 예시 데이터 & 전처리 함수 (실계산) ============
+const STOPWORDS = new Set(['the','a','an','is','was','and','but','to','i','of','in','on']);
+const stripPunct = w => w.replace(/[^\w가-힣]/g, '');
+const cleanTokens = s => s.toLowerCase().split(/\s+/)
+  .map(stripPunct).filter(w => w && !STOPWORDS.has(w));
+const uniq = arr => [...new Set(arr)];
+
+// Step02·03 이 공유하는 코퍼스
+const CORPUS = [
+  'The barber is a good person.',
+  'A good person keeps the secret.',
+  'The barber told a secret to the barber friend!'
+];
+const CORPUS_TOKS = CORPUS.map(cleanTokens);
+
+// 빈도 계산 → 빈도순 정렬 → vocab(1부터)
+function buildFreq(tokss){
+  const m = new Map();
+  tokss.flat().forEach(w => m.set(w, (m.get(w) || 0) + 1));
+  return [...m.entries()].sort((a, b) => b[1] - a[1]); // 동률은 등장순 유지(stable)
+}
+const FREQ = buildFreq(CORPUS_TOKS);
+const VOCAB = Object.fromEntries(FREQ.map(([w], i) => [w, i + 1]));
+const ENCODED = CORPUS_TOKS.map(toks => toks.map(w => VOCAB[w]));
+
+const tokHTML = (t, cls = '') => `<span class="tok ${cls}">${t}</span>`;
+
+// ---------- STEP 0 : 토큰화 ----------
+(function(){
+  const en = 'Time flies like an arrow';
+  const ko = '사과를 먹었는데 사과가 정말 달았다';
+
+  document.getElementById('enRaw').textContent = `"${en}"`;
+  const enToks = en.split(/\s+/);
+  document.getElementById('enToks').innerHTML = enToks.map(t => tokHTML(t, 'q')).join('');
+  document.getElementById('enNote').innerHTML =
+    `→ 공백으로 자르니 토큰 <b>${enToks.length}개</b>. 영어는 단어 경계가 대체로 공백과 일치해서 이 정도로도 출발할 수 있어요.`;
+
+  document.getElementById('koRaw').textContent = `"${ko}"`;
+  const koToks = ko.split(/\s+/);
+  document.getElementById('koToks').innerHTML = koToks.map(t =>
+    tokHTML(t, t.includes('사과') ? 'kk' : '')).join('');
+  const appleToks = uniq(koToks.filter(t => t.includes('사과')));
+  document.getElementById('koNote').innerHTML =
+    `→ "사과" 이야기를 두 번 했는데, 조사 때문에 <b>${appleToks.map(t => `'${t}'`).join(' / ')}</b> 가 서로 <b>다른 토큰 ${appleToks.length}개</b>로 세어졌어요. 컴퓨터 눈에는 완전히 남남입니다.`;
+
+  // 형태소 분리: 분석기 결과를 예시로 하드코딩 (어절 → 형태소 배열, Mecab류 분석 기준)
+  const MORPH = [['사과','를'], ['먹','었','는데'], ['사과','가'], ['정말'], ['달','았','다']];
+  document.getElementById('koMorph').innerHTML = MORPH.map(parts =>
+    `<span class="morph">${parts.map(p => `<span>${p}</span>`).join('')}</span>`).join('');
+  const morphFlat = MORPH.flat();
+  const appleCnt = morphFlat.filter(m => m === '사과').length;
+  document.getElementById('morphNote').innerHTML =
+    `→ 형태소 단위에서는 <b>'사과' 토큰이 ${appleCnt}번</b> 등장 — 같은 단어로 제대로 묶입니다. (어절 ${MORPH.length}개 → 형태소 ${morphFlat.length}개, 고유 토큰 ${uniq(morphFlat).length}개)`;
+})();
+
+// ---------- STEP 1 : 정제 파이프라인 ----------
+(function(){
+  const dirty = 'The Movie was GREAT!! But the Acting, I think, was a bit Flat...';
+  document.getElementById('dirtyRaw').textContent = `"${dirty}"`;
+
+  // 각 단계의 토큰 상태를 {id, text} 로 미리 계산 (실계산, 불변)
+  const st0 = dirty.split(/\s+/).map((text, id) => ({ id, text }));
+  const st1 = st0.map(t => ({ ...t, text: t.text.toLowerCase() }));
+  const st2 = st1.map(t => ({ ...t, text: stripPunct(t.text) })).filter(t => t.text);
+  const st3 = st2.filter(t => !STOPWORDS.has(t.text));
+  const STAGES = [st0, st1, st2, st3];
+  const NOTES = [
+    '공백 기준으로 자른 원본 토큰이에요. 대문자·구두점이 그대로 붙어 있어요.',
+    '① <b>소문자화</b> — <code>The</code>·<code>the</code>, <code>GREAT</code>·<code>great</code> 가 같은 토큰으로 통일됩니다.',
+    '② <b>구두점 제거</b> — <code>great!!</code> → <code>great</code>. 단어 본체만 남겨요.',
+    '③ <b>불용어 제거</b> — the·was·but·i·a 처럼 의미 기여가 적은 단어를 떼어냅니다. 빨간 취소선 토큰이 사라져요.'
+  ];
+
+  const box = document.getElementById('pipeToks');
+  const note = document.getElementById('pipeNote');
+  const btns = document.getElementById('pipeBtns');
+  let timer = null;
+
+  function render(stage){
+    if (timer) { clearTimeout(timer); timer = null; }
+    const cur = STAGES[stage];
+    const curIds = new Set(cur.map(t => t.id));
+    const prev = stage > 0 ? STAGES[stage - 1] : cur;
+    // 직전 단계 기준으로 표시: 살아남은 토큰은 새 텍스트, 사라진 토큰은 취소선
+    const merged = prev.map(p => {
+      const alive = cur.find(t => t.id === p.id);
+      return alive
+        ? tokHTML(alive.text, stage === 3 ? 'good' : 'q')
+        : `<span class="tok removed" data-gone="1">${p.text}</span>`;
+    });
+    box.innerHTML = merged.join('');
+    note.innerHTML = NOTES[stage] +
+      ` <b style="color:var(--hot)">(토큰 ${cur.length}개${stage > 0 ? `, 직전 ${prev.length}개` : ''})</b>`;
+    // 사라지는 토큰: 취소선으로 잠시 보여준 뒤 fade out
+    const gone = box.querySelectorAll('[data-gone]');
+    if (gone.length) {
+      timer = setTimeout(() => {
+        gone.forEach(el => el.classList.add('fade'));
+        timer = setTimeout(() => {
+          box.innerHTML = cur.map(t => tokHTML(t.text, stage === 3 ? 'good' : 'q')).join('');
+        }, 500);
+      }, 900);
+    }
+    btns.querySelectorAll('button').forEach(b => {
+      const s = +b.dataset.st;
+      b.classList.toggle('on', s === stage);
+      b.classList.toggle('done', s < stage);
+    });
+  }
+  btns.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    render(+b.dataset.st);
+  });
+  render(0);
+})();
+
+// ---------- STEP 2 : 정수 인코딩 ----------
+(function(){
+  // ① 코퍼스: 원문 + 정제 토큰
+  document.getElementById('corpusView').innerHTML = CORPUS.map((s, i) =>
+    `<div class="sentlab">문장 ${i + 1} — "${s}"</div>
+     <div class="tokrow">${CORPUS_TOKS[i].map(t => tokHTML(t, 'q')).join('')}</div>`).join('');
+
+  // ② 빈도표 (실계산)
+  const maxF = FREQ[0][1];
+  document.getElementById('freqBody').innerHTML = FREQ.map(([w, f], i) =>
+    `<tr class="${f === maxF ? 'win' : ''}"><td>${w}</td><td>${f}</td>
+     <td style="text-align:left"><span class="bar" style="width:${(f / maxF) * 110}px"></span></td>
+     <td>${i + 1}</td></tr>`).join('');
+
+  // ③ vocab 사전
+  document.getElementById('dictView').innerHTML =
+    `<span class="pair">&lt;pad&gt; → <b>0</b></span>` +
+    FREQ.map(([w], i) => `<span class="pair">${w} → <b>${i + 1}</b></span>`).join('');
+
+  // ④ 문장 → 숫자 배열 (토큰 위에 단어 라벨)
+  document.getElementById('encodedView').innerHTML = ENCODED.map((arr, i) =>
+    `<div class="sentlab">문장 ${i + 1}</div>
+     <div class="mx-op-row">${
+       VZ.mxMatrix([arr], {
+         acc: 'var(--v)', colLabs: CORPUS_TOKS[i], shape: `[${arr.length}]`,
+         fmtCell: v => String(v)
+       })}</div>`).join('');
+})();
+
+// ---------- STEP 3 : 패딩 ----------
+(function(){
+  const maxLen = Math.max(...ENCODED.map(a => a.length));
+  document.getElementById('maxLenLab').textContent = `maxlen = ${maxLen}`;
+  document.getElementById('finalShape').textContent = `[${ENCODED.length}×${maxLen}]`;
+  document.getElementById('shapeTail').textContent = ` [${ENCODED.length}×${maxLen}]`;
+
+  const pad = (arr, mode) => {
+    const zeros = Array.from({ length: maxLen - arr.length }, () => 0);
+    return mode === 'pre' ? [...zeros, ...arr] : [...arr, ...zeros];
+  };
+  const rowLabs = ENCODED.map((a, i) => `문장${i + 1} <small>len ${a.length}</small>`);
+
+  // 패딩 전: 길이 다른 배열 3개
+  document.getElementById('padBefore').innerHTML = ENCODED.map((arr, i) =>
+    VZ.mxMatrix([arr], { acc: 'var(--v)', title: `문장${i + 1}`, shape: `[${arr.length}]` })).join('');
+
+  function renderPadded(mode){
+    const M = ENCODED.map(a => pad(a, mode));
+    document.getElementById('padAfter').innerHTML = VZ.mxMatrix(M, {
+      acc: 'var(--good)', rowLabs, zeroDim: true,
+      title: mode === 'pre' ? '앞쪽을 0으로 채움 (pre)' : '뒤쪽을 0으로 채움 (post)',
+      shape: `[${M.length}×${maxLen}]`,
+      colLabs: Array.from({ length: maxLen }, (_, j) => `t${j}`)
+    });
+  }
+  const toggle = document.getElementById('padToggle');
+  toggle.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    toggle.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    renderPadded(b.dataset.v);
+  });
+  renderPadded('post');
+})();
+</script>
+</body>
+</html>

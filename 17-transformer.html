@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>17 트랜스포머 · 셀프어텐션 · 딥러닝, 눈으로 보기</title>
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+:root{
+  --bg:#0b0e14; --panel:#121723; --panel-2:#161c2b; --line:#222a3d;
+  --ink:#e6ebf5; --muted:#8a95ad; --faint:#5a6478;
+  --q:#37bdf8;      /* Query  - cyan */
+  --k:#fb7185;      /* Key    - coral */
+  --v:#c084fc;      /* Value  - violet */
+  --hot:#fbbf24;    /* highlight - amber */
+  --good:#34d399;   /* result - green */
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Pretendard',sans-serif; line-height:1.65;
+  background-image:
+    radial-gradient(circle at 15% -10%, rgba(55,189,248,.10), transparent 40%),
+    radial-gradient(circle at 90% 0%, rgba(192,132,252,.10), transparent 35%),
+    linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+  background-size:auto,auto,38px 38px,38px 38px;
+}
+.wrap{max-width:960px; margin:0 auto; padding:56px 24px 120px;}
+.mono{font-family:'JetBrains Mono',monospace;}
+
+header h1{
+  font-size:clamp(28px,5vw,46px); font-weight:800; letter-spacing:-.03em;
+  margin:0 0 6px; line-height:1.1;
+  background:linear-gradient(100deg,#fff,#9bb6ff 60%,var(--q));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+header .tag{
+  font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.25em;
+  text-transform:uppercase; color:var(--q); margin-bottom:18px;
+}
+header p{color:var(--muted); max-width:620px;}
+
+/* 예문 토큰 */
+.sentence{display:flex; gap:8px; flex-wrap:wrap; margin:28px 0 8px;}
+.tok{
+  padding:10px 16px; border-radius:12px; border:1px solid var(--line);
+  background:var(--panel); font-weight:700; font-size:18px; cursor:default;
+  transition:.25s; position:relative;
+}
+.tok small{display:block; font-size:10px; color:var(--muted); font-weight:400; letter-spacing:.05em;}
+.tok.focus{
+  border-color:var(--hot); background:rgba(251,191,36,.12); color:var(--hot);
+  box-shadow:0 0 22px rgba(251,191,36,.18);
+}
+.note{font-size:13px; color:var(--muted);}
+.note b{color:var(--hot);}
+
+/* 스텝 내비 */
+.stepper{display:flex; gap:8px; flex-wrap:wrap; margin:40px 0 24px; position:sticky; top:0; z-index:20;
+  padding:14px 0; background:linear-gradient(var(--bg) 70%, transparent); backdrop-filter:blur(2px);}
+.stepper button{
+  font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700;
+  padding:9px 14px; border-radius:10px; border:1px solid var(--line);
+  background:var(--panel); color:var(--muted); cursor:pointer; transition:.2s;
+}
+.stepper button:hover{border-color:var(--q); color:var(--ink);}
+.stepper button.active{background:var(--q); color:#04121f; border-color:var(--q); box-shadow:0 6px 20px rgba(55,189,248,.3);}
+
+/* 패널 */
+.panel{
+  background:var(--panel); border:1px solid var(--line); border-radius:20px;
+  padding:30px 28px; margin-bottom:22px; display:none;
+  animation:rise .45s ease both;
+}
+.panel.show{display:block;}
+@keyframes rise{from{opacity:0; transform:translateY(14px);}to{opacity:1; transform:none;}}
+.panel h2{margin:0 0 4px; font-size:22px; letter-spacing:-.02em;}
+.panel .lead{color:var(--muted); margin:0 0 22px; font-size:15px;}
+.kicker{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.2em; text-transform:uppercase;}
+
+/* 벡터 칩 */
+.vec{display:inline-flex; gap:3px; padding:5px; border-radius:10px; background:var(--panel-2); border:1px solid var(--line);}
+.vec .n{
+  font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:#04121f;
+  min-width:46px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px;
+}
+.label{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:6px;}
+.q .n{background:var(--q);} .k .n{background:var(--k);} .v .n{background:var(--v); color:#160a26;}
+.tagchip{font-family:'JetBrains Mono',monospace; font-size:11px; padding:2px 8px; border-radius:6px; font-weight:700;}
+.tagchip.q{background:rgba(55,189,248,.15); color:var(--q);}
+.tagchip.k{background:rgba(251,113,133,.15); color:var(--k);}
+.tagchip.v{background:rgba(192,132,252,.15); color:var(--v);}
+
+.row{display:flex; gap:14px; align-items:center; flex-wrap:wrap;}
+.op{font-size:22px; color:var(--faint); font-weight:700;}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-top:8px;}
+.card{background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:16px;}
+.card h4{margin:0 0 10px; font-size:14px;}
+
+/* Step2 계산 테이블 */
+.calc{width:100%; border-collapse:collapse; font-family:'JetBrains Mono',monospace; font-size:13px; margin-top:10px;}
+.calc th,.calc td{padding:9px 10px; text-align:right; border-bottom:1px solid var(--line);}
+.calc th{color:var(--muted); font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.08em;}
+.calc td:first-child,.calc th:first-child{text-align:left; color:var(--ink);}
+.calc tr.win td{color:var(--hot); font-weight:700;}
+.bar{height:8px; border-radius:4px; background:var(--q); display:inline-block; vertical-align:middle; transition:width .8s cubic-bezier(.2,.8,.2,1);}
+
+/* 히트맵 */
+.heat{display:inline-grid; gap:4px; margin-top:14px;}
+.heat .hcell{width:54px; height:42px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+  font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; cursor:pointer; transition:.15s;}
+.heat .hhead{background:transparent; color:var(--muted); font-weight:700; font-size:13px; cursor:default; font-family:'Pretendard';}
+.heat .hcell.dim{opacity:.25;}
+.legend{display:flex; align-items:center; gap:10px; margin-top:14px; font-size:12px; color:var(--muted);}
+.legend .scale{height:12px; width:160px; border-radius:6px;
+  background:linear-gradient(90deg,#1b2233,var(--q));}
+
+/* Step3 비빔밥 */
+.mix{display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; margin-top:6px;}
+.ingredient{flex:1; min-width:120px; background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:14px; text-align:center;}
+.ingredient .w{font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:700; color:var(--v);}
+.ingredient .ww{font-size:11px; color:var(--muted);}
+.result-vec{margin-top:20px; padding:18px; border-radius:16px; border:1px dashed var(--good);
+  background:rgba(52,211,153,.07);}
+
+/* Step4 레이어 스택 */
+.stack{display:flex; flex-direction:column-reverse; gap:0; margin-top:10px;}
+.layer{display:flex; align-items:center; gap:16px; padding:16px 20px; border-radius:14px; margin:5px 0;
+  border:1px solid var(--line); background:var(--panel-2); transition:.3s;}
+.layer .lv{font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; min-width:120px;}
+.layer .ld{font-size:14px; color:var(--muted);}
+.layer.l1{border-color:#facc15;} .layer.l1 .lv{color:#facc15;}
+.layer.l2{border-color:var(--q);} .layer.l2 .lv{color:var(--q);}
+.layer.l3{border-color:var(--v);} .layer.l3 .lv{color:var(--v);}
+.layer.lf{border-color:var(--good); background:rgba(52,211,153,.1);} .layer.lf .lv{color:var(--good);}
+.layer.dots{justify-content:center; border-style:dashed; color:var(--faint);}
+.up{text-align:center; color:var(--faint); font-size:13px; margin:2px 0;}
+.why{margin-top:22px; padding:18px 20px; border-radius:14px; background:rgba(192,132,252,.07); border:1px solid rgba(192,132,252,.25);}
+.why li{margin:8px 0; color:var(--ink);} .why li b{color:var(--v);}
+
+/* 범용 행렬(텐서) 렌더러 */
+.mx-op-row{display:flex; gap:14px; align-items:center; flex-wrap:wrap; overflow-x:auto; padding:6px 2px 10px;}
+.mx{display:inline-flex; flex-direction:column; gap:7px; align-items:center;}
+.mx-title{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);}
+.mx-body{display:flex; gap:7px; align-items:flex-start;}
+.mx-rowlabs{display:flex; flex-direction:column; gap:5px;}
+.mx-rowlabs.head-pad{padding-top:17px;}
+.mx-rowlab{height:34px; display:flex; align-items:center; justify-content:flex-end; font-size:13px; font-weight:700;
+  color:var(--ink); padding-right:4px; white-space:nowrap;}
+.mx-rowlab small{color:var(--hot); font-weight:400; font-size:11px; margin-left:3px;}
+.mx-colwrap{display:flex; flex-direction:column; gap:5px;}
+.mx-colhead{display:grid; gap:5px;}
+.mx-colhead .h{font-size:9px; color:var(--muted); text-align:center; height:12px; font-family:'JetBrains Mono',monospace;}
+.mx-bracket{position:relative; padding:5px 11px;}
+.mx-bracket::before,.mx-bracket::after{content:''; position:absolute; top:0; bottom:0; width:8px; border:2.5px solid var(--acc,var(--line));}
+.mx-bracket::before{left:0; border-right:none; border-radius:5px 0 0 5px;}
+.mx-bracket::after{right:0; border-left:none; border-radius:0 5px 5px 0;}
+.mx-grid{display:grid; gap:5px;}
+.mx-cell{width:50px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:5px;
+  font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);}
+.mx-cell.hl{background:rgba(251,191,36,.16); border-color:var(--hot); color:var(--hot);}
+.mx-shape{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--acc,var(--muted)); font-weight:700;}
+.mx-bigop{font-size:22px; color:var(--faint); font-weight:700; flex:none;}
+.mx-note{font-size:13.5px; color:var(--muted); margin-top:16px; line-height:1.7;} .mx-note b{color:var(--hot);}
+.mx-flowtag{display:inline-block; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--q);
+  padding:6px 12px; border-radius:8px; background:rgba(55,189,248,.08); border:1px solid rgba(55,189,248,.25); margin:14px 0;}
+
+/* Step2 softmax 설명 & 시각화 */
+.sm-box{background:rgba(55,189,248,.06); border:1px solid rgba(55,189,248,.25); border-radius:14px; padding:18px 20px; margin:6px 0 26px;}
+.sm-q{font-weight:800; font-size:16px; color:var(--q); margin-bottom:8px;}
+.sm-box p{margin:0 0 12px; font-size:14px; color:var(--ink);} .sm-box p b{color:var(--hot);}
+.sm-steps{display:flex; flex-direction:column; gap:8px; margin-bottom:14px;}
+.sm-steps>div{font-size:14px; color:var(--muted); display:flex; gap:10px; align-items:baseline;}
+.sm-steps b{color:var(--ink);} .sm-steps code{font-family:'JetBrains Mono',monospace; color:var(--q); font-size:13px;}
+.sm-n{flex:none; width:22px; height:22px; border-radius:50%; background:var(--q); color:#04121f;
+  font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center;}
+.sm-formula{font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--ink); text-align:center;
+  padding:12px; border-radius:10px; background:var(--panel); border:1px dashed var(--line);}
+.sm-formula sub{font-size:10px;} .sm-formula sup{font-size:10px;}
+
+.sm-sub{font-weight:700; font-size:15px; margin:0 0 12px; color:var(--ink);}
+.calc tbody tr{cursor:pointer; transition:.15s;}
+.calc tbody tr:hover{background:rgba(255,255,255,.03);}
+.calc tbody tr.open{background:rgba(251,191,36,.06);}
+.dot-detail{margin-top:10px; min-height:0;}
+.dot-detail .dd-card{font-family:'JetBrains Mono',monospace; font-size:14px; background:var(--panel-2);
+  border:1px solid var(--line); border-radius:11px; padding:14px 16px; line-height:1.9; animation:rise .3s ease both;}
+.dot-detail .q{color:var(--q);} .dot-detail .k{color:var(--k);} .dot-detail .r{color:var(--hot); font-weight:700;}
+.dot-detail .small{display:block; font-family:'Pretendard'; font-size:12px; color:var(--muted); margin-top:6px;}
+
+.sm-flow{display:flex; flex-direction:column; gap:8px;}
+.sm-flowrow{display:grid; grid-template-columns:74px 22px 96px 22px 1fr; gap:10px; align-items:center;}
+.sm-flowrow.head{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+.sm-chip{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:13px; padding:7px 0; border-radius:8px; text-align:center;
+  background:var(--panel-2); border:1px solid var(--line); color:var(--ink);}
+.sm-chip.exp{color:var(--q); border-color:rgba(55,189,248,.4);}
+.sm-arrow{text-align:center; color:var(--faint); font-size:13px;}
+.sm-pct{display:flex; align-items:center; gap:10px;}
+.sm-pct .ptrack{flex:1; height:22px; border-radius:7px; background:var(--panel-2); border:1px solid var(--line); overflow:hidden;}
+.sm-pct .pfill{height:100%; border-radius:6px; transition:width .7s cubic-bezier(.2,.8,.2,1);}
+.sm-pct .pnum{font-family:'JetBrains Mono',monospace; font-size:13px; width:54px; text-align:right; color:var(--ink);}
+
+.sm-donutwrap{display:flex; gap:28px; align-items:center; flex-wrap:wrap; margin-top:24px;
+  padding:20px; border-radius:14px; background:var(--panel-2); border:1px solid var(--line);}
+.sm-donut{width:150px; height:150px; border-radius:50%; flex:none; position:relative;}
+.sm-donut::after{content:'합 100%'; position:absolute; inset:34px; background:var(--panel); border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted);}
+.sm-legend{display:flex; flex-direction:column; gap:9px;}
+.sm-legend .lg{display:flex; align-items:center; gap:10px; font-size:14px;}
+.sm-legend .sw{width:14px; height:14px; border-radius:4px; flex:none;}
+.sm-legend .lgname{font-weight:700; min-width:54px;} .sm-legend .lgpct{font-family:'JetBrains Mono',monospace; color:var(--muted);}
+
+/* Step0 벡터⇄텐서 토글 */
+.view-toggle{display:inline-flex; gap:6px; margin:4px 0 20px; padding:4px; border-radius:11px;
+  background:var(--panel-2); border:1px solid var(--line);}
+.view-toggle button{font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700;
+  padding:8px 14px; border-radius:8px; border:none; background:transparent; color:var(--muted); cursor:pointer; transition:.2s;}
+.view-toggle button.on{background:var(--hot); color:#1a1304;}
+.x-stage{display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap;}
+.x-labcol{display:flex; flex-direction:column; gap:6px; padding-top:6px;}
+.x-dimhead{display:grid; grid-template-columns:repeat(3,58px); gap:6px; margin-bottom:6px;}
+.x-matgrid{display:grid; grid-template-columns:repeat(3,58px); gap:6px;}
+.x-head{font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); text-align:center; height:14px;}
+.x-rowlab{font-size:14px; font-weight:700; color:var(--ink); display:flex; align-items:center; justify-content:flex-end;
+  padding-right:6px; height:38px;}
+.x-rowlab small{color:var(--hot); font-weight:400; margin-left:5px; font-size:12px;}
+.x-cell{font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; height:38px;
+  display:flex; align-items:center; justify-content:center; background:#243049; border:1px solid #33405c; color:#e6ebf5;}
+.x-bracket{position:relative; padding:6px 16px;}
+.x-bracket::before,.x-bracket::after{content:''; position:absolute; top:0; bottom:0; width:10px;
+  border:2.5px solid var(--hot);}
+.x-bracket::before{left:0; border-right:none; border-radius:6px 0 0 6px;}
+.x-bracket::after{right:0; border-left:none; border-radius:0 6px 6px 0;}
+.x-shape{margin-top:14px; font-family:'JetBrains Mono',monospace; font-size:15px; color:var(--hot); font-weight:700;}
+.x-explain{flex:1; min-width:240px; font-size:14px; color:var(--muted); line-height:1.7;}
+.x-explain b{color:var(--hot);} .x-explain code{font-family:'JetBrains Mono',monospace; color:var(--q); font-size:13px;}
+.tensor-stack{margin-top:14px; display:flex; flex-direction:column; gap:0; align-items:flex-start;}
+.tensor-stack .slab{padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel);
+  font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-top:-4px; margin-left:var(--off,0);}
+
+/* Step1 행렬곱 계산기 */
+.mm{margin-top:26px; background:var(--panel-2); border:1px solid var(--line); border-radius:16px; padding:22px;}
+.mm-tabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px;}
+.mm-tabs button{font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; padding:8px 13px;
+  border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--muted); cursor:pointer; transition:.2s;}
+.mm-tabs button sub{font-size:9px;}
+.mm-tabs button.on{color:#04121f; border-color:transparent;}
+.mm-tabs button[data-p="Q"].on{background:var(--q);}
+.mm-tabs button[data-p="K"].on{background:var(--k);}
+.mm-tabs button[data-p="V"].on{background:var(--v); color:#160a26;}
+.mm-hint{font-size:13px; color:var(--muted); margin:10px 0 16px;}
+.mm-hint b{color:var(--hot);}
+
+.mm-stage{display:inline-grid; gap:7px; align-items:center;
+  grid-template-columns:auto 26px auto 26px auto;}
+.mm-col{display:flex; flex-direction:column; gap:7px; align-items:center;}
+.mm-col .ttl{font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.05em; margin-bottom:2px; height:14px;}
+.mm-op{font-size:20px; color:var(--faint); text-align:center; font-weight:700;}
+.cellbox{font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; width:54px; height:38px;
+  display:flex; align-items:center; justify-content:center; border-radius:7px; border:1px solid var(--line);
+  background:var(--panel); color:var(--ink); transition:.2s;}
+.mm-emb .cellbox{background:#243049; border-color:#33405c;}
+.mm-mat{display:grid; grid-template-columns:repeat(3,54px); gap:7px;}
+.mm-mat .cellbox{cursor:default; color:var(--muted);}
+.mm-out .cellbox{cursor:pointer; font-weight:700;}
+.mm-out .cellbox:hover{transform:translateY(-2px);}
+/* 하이라이트 */
+.cellbox.lit-row{box-shadow:0 0 0 2px var(--hot); color:var(--hot)!important; background:rgba(251,191,36,.10)!important;}
+.cellbox.lit-col{box-shadow:0 0 0 2px var(--q);}
+.mm-out .cellbox.sel{box-shadow:0 0 0 3px var(--good); color:var(--good); background:rgba(52,211,153,.12);}
+.mm-calc{margin-top:18px; font-family:'JetBrains Mono',monospace; font-size:15px; padding:14px 16px;
+  border-radius:11px; background:var(--panel); border:1px solid var(--line); line-height:2;}
+.mm-calc .t-row{color:var(--hot);} .mm-calc .t-col{color:var(--q);} .mm-calc .t-res{color:var(--good); font-weight:700;}
+.mm-calc .small{font-size:12px; color:var(--muted); font-family:'Pretendard'; display:block; margin-top:6px;}
+
+/* 플레이그라운드 */
+.pg-input{width:100%; padding:14px 16px; border-radius:12px; border:1px solid var(--line);
+  background:var(--panel-2); color:var(--ink); font-size:17px; font-family:'Pretendard'; outline:none; transition:.2s;}
+.pg-input:focus{border-color:var(--q); box-shadow:0 0 0 3px rgba(55,189,248,.15);}
+.pg-presets{display:flex; gap:8px; flex-wrap:wrap; margin:12px 0 4px;}
+.pg-presets button{font-size:12px; padding:6px 11px; border-radius:8px; border:1px solid var(--line);
+  background:var(--panel-2); color:var(--muted); cursor:pointer; font-family:'Pretendard'; transition:.2s;}
+.pg-presets button:hover{border-color:var(--q); color:var(--ink);}
+.pg-focus{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:18px 0 6px;}
+.pg-focus .fchip{padding:7px 14px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2);
+  color:var(--muted); cursor:pointer; font-weight:700; transition:.2s; font-size:15px;}
+.pg-focus .fchip.on{border-color:var(--hot); background:rgba(251,191,36,.14); color:var(--hot); box-shadow:0 0 18px rgba(251,191,36,.18);}
+.pg-bars{margin-top:18px; display:flex; flex-direction:column; gap:10px;}
+.pg-bar{display:grid; grid-template-columns:90px 1fr 64px; gap:12px; align-items:center;}
+.pg-bar .bw{font-weight:700; font-size:15px; text-align:right; color:var(--ink);}
+.pg-bar .track{height:26px; border-radius:7px; background:var(--panel-2); overflow:hidden; border:1px solid var(--line);}
+.pg-bar .fill{height:100%; border-radius:6px; background:linear-gradient(90deg,var(--q),#7dd3fc);
+  transition:width .55s cubic-bezier(.2,.8,.2,1); min-width:2px;}
+.pg-bar.win .fill{background:linear-gradient(90deg,var(--hot),#fde68a);}
+.pg-bar .pct{font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--muted); text-align:right;}
+.pg-bar.win .pct{color:var(--hot); font-weight:700;}
+.disclaimer{margin-top:20px; padding:14px 16px; border-radius:12px; font-size:13px; color:var(--muted);
+  background:rgba(251,113,133,.07); border:1px solid rgba(251,113,133,.2);}
+.disclaimer b{color:var(--k);}
+.foot{color:var(--faint); font-size:12px; text-align:center; margin-top:40px; font-family:'JetBrains Mono',monospace;}
+b.h{color:var(--hot);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div style="margin-bottom:24px"><a href="index.html" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8a95ad;text-decoration:none;padding:8px 13px;border:1px solid #222a3d;border-radius:9px;background:#121723;">← 목차로</a></div>
+
+  <header>
+    <div class="tag">PART 5 · ATTENTION</div>
+    <h1>"배"의 정체를 밝혀라</h1>
+    <p>같은 글자 <b class="h">배</b> 는 과일🍐·신체🤰·선박🚢 중 무엇일까? 트랜스포머는 <b class="h">주변 단어를 얼마나 참고할지</b> 스스로 계산해서 의미를 확정합니다. 아래 단계를 클릭하며 실제 숫자가 흐르는 걸 따라가 보세요.</p>
+
+    <div class="sentence" id="sentence"></div>
+    <p class="note">초점 단어: <b>배</b> — 이 단어 하나가 업데이트되는 과정을 추적합니다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 입력</button>
+    <button data-s="1">01 · Q/K/V 분신술</button>
+    <button data-s="2">02 · 점수 &amp; Softmax</button>
+    <button data-s="3">03 · 가중합(비빔밥)</button>
+    <button data-s="4">04 · 히트맵</button>
+    <button data-s="5">05 · 레이어 반복</button>
+    <button data-s="6">06 · 플레이그라운드</button>
+  </nav>
+
+  <!-- STEP 0 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Embedding</span>
+    <h2>단어는 벡터로 시작하지만, 실제론 "한 덩어리(텐서)"로 들어간다</h2>
+    <p class="lead">컴퓨터는 글자를 모릅니다. 각 단어(토큰)는 의미를 담은 숫자 묶음, 즉 <b class="h">임베딩 벡터</b>가 됩니다(여기선 3차원). 그런데 모델에 넣을 땐 단어를 하나씩 넣지 않고, 벡터들을 <b class="h">쌓아 행렬/텐서 한 덩어리</b>로 한꺼번에 넣어요. 토글로 두 관점을 비교해 보세요.</p>
+
+    <div class="view-toggle" id="embToggle">
+      <button data-v="cards" class="on">🧩 단어별 벡터</button>
+      <button data-v="tensor">📦 한 덩어리 (텐서)</button>
+    </div>
+
+    <div id="embeds" class="grid3"></div>
+    <div id="embedTensor" style="display:none"></div>
+
+    <p class="note" style="margin-top:18px;">→ 이 시점의 <b>배</b> 벡터는 아직 "과일/신체/배" 중 무엇인지 모르는 <b>중립 상태</b>입니다.</p>
+  </section>
+
+  <!-- STEP 1 -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Projection</span>
+    <h2>하나의 단어가 Q · K · V 세 갈래로 분신한다</h2>
+    <p class="lead">각 단어 벡터에 학습된 가중치 행렬(W<sub>Q</sub>, W<sub>K</sub>, W<sub>V</sub>)을 곱해 <b class="h">세 가지 역할</b>의 벡터를 만듭니다. 행렬곱이 낯설다면 아래에서 <b class="h">출력 칸을 클릭</b>해 계산이 분해되는 걸 보세요.</p>
+    <div class="grid3">
+      <div class="card"><span class="tagchip q">Query</span><h4>"내가 찾는 것"</h4><p class="note">배가 주변에 던지는 <b>질문</b>. "나를 설명해 줄 단어 어디 있어?"</p></div>
+      <div class="card"><span class="tagchip k">Key</span><h4>"내가 가진 것"</h4><p class="note">각 단어가 들고 있는 <b>명함/꼬리표</b>. 질문과 맞춰보는 대상.</p></div>
+      <div class="card"><span class="tagchip v">Value</span><h4>"내가 줄 정보"</h4><p class="note">매칭되면 실제로 <b>전달되는 내용물</b>.</p></div>
+    </div>
+
+    <div class="view-toggle" id="mmViewToggle" style="margin-top:18px">
+      <button data-v="single" class="on">🧩 한 단어 (배) 자세히</button>
+      <button data-v="tensor">📦 한 덩어리 (X 전체)</button>
+    </div>
+    <div id="mmTensor" style="display:none"></div>
+
+    <div class="mm" id="mm">
+      <div class="mm-tabs" id="mmTabs">
+        <button data-p="Q" class="on">emb × W<sub>Q</sub> → Query</button>
+        <button data-p="K">emb × W<sub>K</sub> → Key</button>
+        <button data-p="V">emb × W<sub>V</sub> → Value</button>
+      </div>
+      <div class="mm-hint" id="mmHint"></div>
+      <div class="mm-stage" id="mmStage"></div>
+      <div class="mm-calc" id="mmCalc"></div>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--k)">Step 02 — Score · Scale · Softmax</span>
+    <h2>"배"의 질문(Q)을 모든 명함(K)에 대본다</h2>
+    <p class="lead">
+      <b class="h">배의 Q</b> 와 각 단어의 <b style="color:var(--k)">K</b> 를 내적(dot product)하면 "얼마나 관련 있나" 점수가 나옵니다.
+      → √d 로 나눠 안정화(scale) → <b class="h">Softmax</b> 로 합이 1인 확률(비중)로 변환.
+    </p>
+
+    <div class="sm-box">
+      <div class="sm-q">❓ Softmax 가 뭐예요?</div>
+      <p>점수(아무 숫자나 가능)를 <b>"합이 100%인 비중"</b>으로 바꿔주는 변환입니다. 마치 점수에 비례해 <b>주의(attention) 파이를 잘라 나눠주는</b> 것과 같아요.</p>
+      <div class="sm-steps">
+        <div><span class="sm-n">1</span> 각 점수를 <code>e^x</code> (지수)로 — 전부 양수가 되고, <b>큰 값이 더 크게 벌어집니다</b> (1등을 부각).</div>
+        <div><span class="sm-n">2</span> 각 <code>e^x</code> 를 <b>전체 합으로 나눔</b> — 그러면 다 더해서 정확히 1(100%)이 됩니다.</div>
+      </div>
+      <div class="sm-formula">softmax(x<sub>i</sub>) = e<sup>x<sub>i</sub></sup> ÷ ( e<sup>x<sub>1</sub></sup> + e<sup>x<sub>2</sub></sup> + … + e<sup>x<sub>n</sub></sup> )</div>
+    </div>
+
+    <div class="view-toggle" id="s2ViewToggle">
+      <button data-v="single" class="on">🧩 한 단어 (배) 자세히</button>
+      <button data-v="tensor">📦 한 덩어리 (전체 행렬)</button>
+    </div>
+    <div id="s2tensor" style="display:none"></div>
+
+    <div id="s2single">
+      <div class="sm-sub">① Q·K 점수 — <span style="color:var(--muted);font-weight:400">행을 클릭하면 내적 계산이 펼쳐집니다</span></div>
+      <table class="calc" id="scoreTable"></table>
+      <div id="dotDetail" class="dot-detail"></div>
+
+      <div class="sm-sub" style="margin-top:28px">② Softmax 변환 — 점수를 확률(비중)로</div>
+      <div class="sm-flow" id="smFlow"></div>
+      <div class="sm-donutwrap">
+        <div class="sm-donut" id="smDonut"></div>
+        <div class="sm-legend" id="smLegend"></div>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:20px;">→ <b>배</b>는 동사 <b>먹었다</b> 에 가장 큰 비중을 둡니다. 그래서 "먹는 대상 = 과일 배 🍐" 라는 해석이 강해져요.</p>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--v)">Step 03 — Weighted Sum</span>
+    <h2>비중만큼 Value를 섞는다 (비빔밥)</h2>
+    <p class="lead">앞에서 구한 비중(softmax)을 각 단어의 <b style="color:var(--v)">Value</b> 에 곱해 전부 더합니다. 비중 큰 재료가 맛을 지배하죠.</p>
+
+    <div class="view-toggle" id="s3ViewToggle">
+      <button data-v="single" class="on">🧩 한 단어 (배) 자세히</button>
+      <button data-v="tensor">📦 한 덩어리 (전체 행렬)</button>
+    </div>
+    <div id="s3tensor" style="display:none"></div>
+
+    <div id="s3single">
+      <div class="mix" id="mix"></div>
+      <div class="result-vec">
+        <div class="label" style="color:var(--good)">▶ 업데이트된 "배" 벡터 (context-aware)</div>
+        <div id="resultVec"></div>
+        <p class="note" style="margin-top:12px;">→ 이제 <b>배</b> 벡터 안에 <b>"먹는 행위"의 정보</b>가 녹아들었습니다. 더 이상 중립이 아니라 <b style="color:var(--good)">과일 배</b> 쪽으로 기울었어요.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="panel" data-panel="4">
+    <span class="kicker" style="color:var(--q)">Step 04 — Attention Map</span>
+    <h2>전체 어텐션 히트맵</h2>
+    <p class="lead">사실 모든 단어가 동시에 위 과정을 거칩니다. 각 행(Query)이 각 열(Key)을 <b class="h">얼마나 참고하는지</b>를 한눈에 본 지도입니다. 행을 클릭해 보세요.</p>
+    <div id="heat" class="heat"></div>
+    <div class="legend"><span>적게 참고</span><span class="scale"></span><span>많이 참고</span></div>
+    <p class="note" style="margin-top:14px;">→ <b>배 행</b>을 보면 <b>먹었다</b> 칸이 가장 밝습니다 = 가장 많이 참고.</p>
+  </section>
+
+  <!-- STEP 5 -->
+  <section class="panel" data-panel="5">
+    <span class="kicker" style="color:var(--good)">Step 05 — Layer Stacking</span>
+    <h2>이 과정을 수십 번 층층이 반복한다</h2>
+    <p class="lead">한 번으로 끝이 아닙니다. 같은 Attention 블록을 <b class="h">수십~수백 층</b> 쌓아, 의미를 점점 정교하게 다듬습니다.</p>
+    <div class="callout" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06)">
+      <div class="ttl" style="color:var(--hot)">읽기 전 한 줄</div>
+      <p style="margin:0">아래 층별 역할 설명과 확률 숫자는 <b>이해를 돕기 위한 비유·연출</b>이에요. 실제 모델의 각 층이 "문법층/논리층/은유층"으로 이렇게 깔끔히 나뉘지는 않습니다(해석가능성 연구의 대략적 경향일 뿐). 핵심 메시지는 <b>"같은 연산을 깊이 쌓을수록 표현이 정교해진다"</b> 하나예요.</p>
+    </div>
+    <div class="stack">
+      <div class="up">↑ 처음 들어온 데이터</div>
+      <div class="layer l1"><span class="lv">Layer 1</span><span class="ld">기초 문법·인접 단어 매칭 ("배 옆에 먹었다가 있네")</span></div>
+      <div class="up">↑</div>
+      <div class="layer l2"><span class="lv">Layer 12</span><span class="ld">문장 논리·단어 간 관계 정립 ("배는 먹었다의 목적어")</span></div>
+      <div class="up">↑</div>
+      <div class="layer dots">⋯ 수십 개 레이어 통과 ⋯</div>
+      <div class="up">↑</div>
+      <div class="layer l3"><span class="lv">Layer 96</span><span class="ld">은유·상황 맥락 파악 ("철수가 허기를 달랜 과일")</span></div>
+      <div class="up">↑ 고차원 추론 완성</div>
+      <div class="layer lf"><span class="lv">Final</span><span class="ld">"이 문맥의 배 = 먹는 과일 🍐" &nbsp;<span style="opacity:.7">(예시 확률 92/5/3% — 연출값)</span></span></div>
+    </div>
+    <div class="why">
+      <b style="color:var(--v)">🤔 왜 반복하나요?</b>
+      <ul>
+        <li><b>정제(Refinement):</b> 얕은 층은 주변만 훑고, 깊은 층은 문장 전체의 숨은 의도까지 녹여 넣습니다.</li>
+        <li><b>지능의 깊이:</b> 층이 깊어질수록 텐서 속 숫자가 단순 값에서 <b>추론 능력</b>으로 진화합니다.</li>
+        <li><b>병렬 전문가(Multi-Head):</b> 각 층마다 여러 Head가 서로 다른 각도(문법/의미/위치…)에서 동시에 섞기를 수행합니다.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- STEP 6 : PLAYGROUND -->
+  <section class="panel" data-panel="6">
+    <span class="kicker" style="color:var(--hot)">Step 06 — Playground</span>
+    <h2>직접 입력하고 비중이 바뀌는 걸 보세요</h2>
+    <p class="lead">문장을 <b class="h">띄어쓰기로</b> 입력하면 토큰으로 쪼개집니다. 초점 단어(Query)를 고르면, 그 단어가 나머지 단어를 <b class="h">얼마나 참고하는지</b> 비중이 실시간으로 다시 계산됩니다.</p>
+
+    <input id="pgInput" class="pg-input mono" type="text" value="철수 가 배 를 먹었다" autocomplete="off" spellcheck="false">
+    <div class="pg-presets" id="pgPresets">
+      <button data-s="철수 가 배 를 먹었다">철수 가 배 를 먹었다</button>
+      <button data-s="나 는 사과 와 배 를 샀다">나 는 사과 와 배 를 샀다</button>
+      <button data-s="강 에 배 가 떠 있다">강 에 배 가 떠 있다</button>
+      <button data-s="The cat sat on the mat">The cat sat on the mat</button>
+    </div>
+
+    <div class="label" style="margin-top:18px">초점 단어 (Query) 선택 ▼</div>
+    <div class="pg-focus" id="pgFocus"></div>
+
+    <div class="label" style="margin-top:18px">→ <span id="pgFocusName" style="color:var(--hot)">배</span> 가 각 단어를 참고하는 비중 (Attention Weights, 합=100%)</div>
+    <div class="pg-bars" id="pgBars"></div>
+
+    <div class="disclaimer">
+      ⚠️ <b>정직한 안내:</b> 임베딩 벡터는 실제 학습된 값이 아니라 <b>글자에서 결정론적으로 생성한 합성값</b>입니다.
+      그래서 의미(과일/선박)를 진짜로 구분하진 못해요. 다만 <b>내적 → √d 스케일 → Softmax</b> 라는
+      <b>어텐션 수식 자체는 100% 실제 계산</b>이라, 토큰을 바꾸면 비중이 어떻게 출렁이는지 메커니즘을 체감할 수 있습니다.
+    </div>
+  </section>
+
+  <p class="foot">// 숫자는 브라우저에서 실제 dot-product + softmax 로 계산됩니다. 교육용 단순화 (d=3, single head, 합성 임베딩).</p>
+</div>
+
+<script>
+// ---- 데이터: 예문 "철수가 배를 먹었다" 를 4토큰으로 단순화 ----
+const tokens = [
+  {w:"철수", sub:"주어", emb:[0.6,0.2,0.5]},
+  {w:"배",   sub:"???",  emb:[0.7,0.3,0.4], focus:true},
+  {w:"를",   sub:"조사", emb:[0.1,0.9,0.1]},
+  {w:"먹었다",sub:"동사", emb:[0.8,0.2,0.7]},
+];
+// 학습됐다고 가정한 가중치 행렬 (3×3). out_j = Σ_i emb_i · W[i][j]
+const Wmats = {
+  Q: [[1.2,0.1,1.0],[0.0,0.6,0.0],[0.9,0.1,1.4]],
+  K: [[1.1,0.2,0.9],[0.1,0.7,0.1],[1.0,0.1,1.3]],
+  V: [[0.6,0.5,0.3],[0.1,0.2,0.0],[0.5,0.3,0.7]],
+};
+const proj = (emb,W)=>[0,1,2].map(j=>+(emb[0]*W[0][j]+emb[1]*W[1][j]+emb[2]*W[2][j]).toFixed(2));
+// 모든 토큰의 Q/K/V 를 행렬곱으로 실제 계산
+const Q={}, K={}, V={};
+tokens.forEach(t=>{ Q[t.w]=proj(t.emb,Wmats.Q); K[t.w]=proj(t.emb,Wmats.K); V[t.w]=proj(t.emb,Wmats.V); });
+const d = 3, scale = Math.sqrt(d);
+
+const dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
+const fmt=n=>n.toFixed(2);
+
+// 배 기준 점수/softmax 계산
+const names = tokens.map(t=>t.w);
+const rawScores = names.map(n=>dot(Q["배"],K[n]));
+const scaled = rawScores.map(s=>s/scale);
+const mx = Math.max(...scaled);
+const exps = scaled.map(s=>Math.exp(s-mx));
+const sumE = exps.reduce((a,b)=>a+b,0);
+const weights = exps.map(e=>e/sumE);
+
+// 최종 가중합 벡터
+const resVec=[0,0,0];
+names.forEach((n,i)=>{ V[n].forEach((v,j)=> resVec[j]+=weights[i]*v ); });
+
+// ---- 렌더 ----
+const sentenceEl=document.getElementById('sentence');
+tokens.forEach(t=>{
+  const el=document.createElement('div');
+  el.className='tok'+(t.focus?' focus':'');
+  el.innerHTML=`${t.w}<small>${t.sub}</small>`;
+  sentenceEl.appendChild(el);
+});
+
+// step0 임베딩
+const embEl=document.getElementById('embeds');
+tokens.forEach(t=>{
+  embEl.insertAdjacentHTML('beforeend',
+    `<div class="card"><span class="tagchip ${t.focus?'q':''}" style="${t.focus?'':'background:#1c2333;color:#8a95ad'}">${t.w}</span>
+     <div class="label" style="margin-top:10px">embedding</div>
+     <div class="vec" style="background:transparent;border:none;padding:0">
+       ${t.emb.map(x=>`<span class="n" style="background:#243049;color:#e6ebf5">${fmt(x)}</span>`).join('')}
+     </div></div>`);
+});
+
+// step0 텐서 뷰 (벡터들을 쌓은 행렬 X)
+(function(){
+  const rows=tokens.length, cols=3;
+  document.getElementById('embedTensor').innerHTML=`
+    <div class="x-stage">
+      <div>
+        <div style="display:flex; align-items:flex-start; gap:10px;">
+          <div class="x-labcol">
+            <div class="x-head"></div>
+            ${tokens.map(t=>`<div class="x-rowlab">${t.w}${t.focus?' <small>★</small>':''}</div>`).join('')}
+          </div>
+          <div>
+            <div class="x-dimhead">${[1,2,3].map(d=>`<div class="x-head">dim${d}</div>`).join('')}</div>
+            <div class="x-bracket">
+              <div class="x-matgrid">
+                ${tokens.map(t=>t.emb.map(x=>`<div class="x-cell">${fmt(x)}</div>`).join('')).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="x-shape">X.shape = [ ${rows} 단어 × ${cols} 차원 ]</div>
+        <div class="tensor-stack">
+          <div class="slab" style="--off:0px">문장 1 : [${rows} × ${cols}]</div>
+          <div class="slab" style="--off:8px">문장 2 : [${rows} × ${cols}]</div>
+          <div class="slab" style="--off:16px">⋯ batch (여러 문장 동시에) ⋯</div>
+        </div>
+      </div>
+      <div class="x-explain">
+        <p>위 ${rows}개 벡터를 위아래로 <b>쌓으면 행렬 X 하나</b>가 됩니다. 이게 실제로 모델에 들어가는 모양이에요.</p>
+        <p>여러 문장을 한 번에 처리하면 <code>[batch × 단어수 × 차원]</code> = <b>3차원 텐서</b>가 됩니다. 그래서 'tensor'!</p>
+        <p>그리고 <code>Q = X · W<sub>Q</sub></code> 같은 계산도 단어마다 따로가 아니라 <b>X 통째로 한 번에(병렬)</b> 곱합니다. Step 01에서 '배' 한 줄만 보여준 건 설명용일 뿐이에요.</p>
+      </div>
+    </div>`;
+})();
+document.getElementById('embToggle').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  const v=b.dataset.v;
+  document.querySelectorAll('#embToggle button').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('embeds').style.display = v==='cards'?'':'none';
+  document.getElementById('embedTensor').style.display = v==='tensor'?'':'none';
+});
+
+// step1 행렬곱 계산기 (초점 단어 "배" 기준)
+const focusTok = tokens.find(t=>t.focus);
+const projMeta = {
+  Q:{name:'Query (질문)', vec:Q[focusTok.w]},
+  K:{name:'Key (명함)',   vec:K[focusTok.w]},
+  V:{name:'Value (내용물)',vec:V[focusTok.w]},
+};
+let mmTab='Q', mmSel=0;
+
+function renderMM(){
+  const W=Wmats[mmTab], emb=focusTok.emb, out=projMeta[mmTab].vec;
+  // 입력 열
+  const embCol=`<div class="mm-col mm-emb"><div class="ttl">emb '${focusTok.w}'</div>`+
+    emb.map((x,i)=>`<div class="cellbox" data-erow="${i}">${fmt(x)}</div>`).join('')+`</div>`;
+  // 행렬
+  let mat='';
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++)
+    mat+=`<div class="cellbox" data-i="${i}" data-j="${j}">${fmt(W[i][j])}</div>`;
+  const matCol=`<div class="mm-col"><div class="ttl">W<sub>${mmTab}</sub> (3×3)</div><div class="mm-mat">${mat}</div></div>`;
+  // 출력 열
+  const outCol=`<div class="mm-col mm-out"><div class="ttl" style="color:var(--good)">${mmTab} '${focusTok.w}'</div>`+
+    out.map((x,j)=>`<div class="cellbox ${j===mmSel?'sel':''}" data-out="${j}">${fmt(x)}</div>`).join('')+`</div>`;
+
+  document.getElementById('mmStage').innerHTML=
+    embCol+`<div class="mm-op">×</div>`+matCol+`<div class="mm-op">=</div>`+outCol;
+  document.getElementById('mmHint').innerHTML=
+    `<b>${out.length}개 출력 값 칸을 클릭</b>해 보세요. 각 출력 = "입력 벡터 ⋅ 행렬의 한 <u>열</u>" 내적입니다. (입력을 세로로 그렸지만 수식상으론 <b>행벡터 × 행렬</b>이에요 — 텐서 뷰의 X 한 행과 같은 것)`;
+
+  highlight();
+  renderCalc();
+}
+function highlight(){
+  const stage=document.getElementById('mmStage');
+  stage.querySelectorAll('.cellbox').forEach(c=>c.classList.remove('lit-row','lit-col'));
+  // 입력 3칸 전부 강조(행 i ↔ 입력 i)
+  stage.querySelectorAll('[data-erow]').forEach(c=>c.classList.add('lit-row'));
+  // 선택한 출력 j 에 대응하는 행렬 '열 j' 강조
+  stage.querySelectorAll(`[data-j="${mmSel}"]`).forEach(c=>c.classList.add('lit-col'));
+  stage.querySelectorAll('.mm-out .cellbox').forEach(c=>
+    c.classList.toggle('sel', +c.dataset.out===mmSel));
+}
+function renderCalc(){
+  const W=Wmats[mmTab], emb=focusTok.emb, out=projMeta[mmTab].vec;
+  const terms=[0,1,2].map(i=>
+    `<span class="t-row">${fmt(emb[i])}</span>×<span class="t-col">${fmt(W[i][mmSel])}</span>`).join('  +  ');
+  document.getElementById('mmCalc').innerHTML=
+    `${mmTab}<sub style="font-size:11px">${mmSel+1}</sub> = ${terms} = <span class="t-res">${fmt(out[mmSel])}</span>
+     <span class="small"><span class="t-row">노란색=입력값</span> · <span class="t-col">파란색=W의 ${mmSel+1}번째 열</span> · 같은 줄(행)끼리 곱해서 전부 더함 → 출력 1칸. 이걸 열마다 반복하면 ${mmTab} 벡터 완성.</span>`;
+}
+// 탭 / 셀 이벤트
+document.getElementById('mmTabs').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  mmTab=b.dataset.p; mmSel=0;
+  document.querySelectorAll('#mmTabs button').forEach(x=>x.classList.toggle('on',x===b));
+  renderMM();
+});
+document.getElementById('mmStage').addEventListener('click',e=>{
+  const c=e.target.closest('.mm-out .cellbox'); if(!c)return;
+  mmSel=+c.dataset.out; highlight(); renderCalc();
+});
+renderMM();
+
+// step2 점수표 + softmax 시각화
+const fw = tokens.find(t=>t.focus).w;          // 초점 단어 "배"
+const maxW=Math.max(...weights);
+const dispExp = scaled.map(s=>Math.exp(s));     // 표시용 e^x (정규화 전)
+const dispSum = dispExp.reduce((a,b)=>a+b,0);
+const palette = ['#60a5fa','#fbbf24','#94a3b8','#34d399'];  // 단어별 색
+
+// 클릭 가능한 점수표
+document.getElementById('scoreTable').innerHTML=`
+  <thead><tr><th>단어 (Key)</th><th>Q·K 내적</th><th>÷√3 (scale)</th><th>Softmax 비중</th><th style="width:170px">시각화</th></tr></thead>
+  <tbody>
+  ${names.map((n,i)=>`
+    <tr data-row="${i}" class="${weights[i]===maxW?'win':''}">
+      <td>${n}${weights[i]===maxW?' 🏆':''}</td>
+      <td>${fmt(rawScores[i])}</td>
+      <td>${fmt(scaled[i])}</td>
+      <td>${(weights[i]*100).toFixed(1)}%</td>
+      <td><span class="bar" style="width:${weights[i]*150}px;background:${weights[i]===maxW?'var(--hot)':'var(--q)'}"></span></td>
+    </tr>`).join('')}
+  </tbody>`;
+
+// 행 클릭 → 내적 분해
+const qv = Q[fw];
+function showDot(i){
+  const n=names[i], kv=K[n];
+  const terms=qv.map((x,j)=>`<span class="q">${fmt(x)}</span>·<span class="k">${fmt(kv[j])}</span>`).join('  +  ');
+  document.getElementById('dotDetail').innerHTML=
+    `<div class="dd-card">
+       Q<sub>${fw}</sub> · K<sub>${n}</sub> = ${terms} = <span class="r">${fmt(rawScores[i])}</span><br>
+       <span style="color:var(--muted)">÷√3 (scale)</span> = ${fmt(rawScores[i])} ÷ 1.73 = <span class="r">${fmt(scaled[i])}</span>
+       <span class="small"><span class="q">파란 = 배의 Q</span> · <span class="k">빨강 = ${n}의 K</span> — 같은 자리끼리 곱해 더한 게 "관련도 점수". √d 로 나눠 값이 너무 커지는 걸 막습니다(scale).</span>
+     </div>`;
+  document.querySelectorAll('#scoreTable tbody tr').forEach(tr=>tr.classList.toggle('open',+tr.dataset.row===i));
+}
+document.getElementById('scoreTable').addEventListener('click',e=>{
+  const tr=e.target.closest('tr[data-row]'); if(!tr)return; showDot(+tr.dataset.row);
+});
+showDot(weights.indexOf(maxW));  // 기본: 가장 비중 큰 단어 펼침
+
+// softmax 변환 흐름
+document.getElementById('smFlow').innerHTML=
+  `<div class="sm-flowrow head"><div>단어 (점수)</div><div></div><div>eˣ 값</div><div></div><div>÷ 합계 = 비중</div></div>`+
+  names.map((n,i)=>`
+    <div class="sm-flowrow">
+      <div><b>${n}</b><div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace">${fmt(scaled[i])}</div></div>
+      <div class="sm-arrow">eˣ →</div>
+      <div class="sm-chip exp">${dispExp[i].toFixed(2)}</div>
+      <div class="sm-arrow">÷${dispSum.toFixed(1)}</div>
+      <div class="sm-pct">
+        <div class="ptrack"><div class="pfill" style="width:${(weights[i]*100).toFixed(1)}%;background:${palette[i]}"></div></div>
+        <div class="pnum">${(weights[i]*100).toFixed(1)}%</div>
+      </div>
+    </div>`).join('');
+
+// 도넛 차트
+let acc=0;
+const segs=names.map((n,i)=>{const a=acc; acc+=weights[i]*360; return `${palette[i]} ${a}deg ${acc}deg`;}).join(',');
+document.getElementById('smDonut').style.background=`conic-gradient(${segs})`;
+document.getElementById('smLegend').innerHTML=names.map((n,i)=>
+  `<div class="lg"><span class="sw" style="background:${palette[i]}"></span>
+     <span class="lgname">${n}</span><span class="lgpct">${(weights[i]*100).toFixed(1)}%</span></div>`).join('');
+
+// step3 비빔밥
+document.getElementById('mix').innerHTML=names.map((n,i)=>`
+  <div class="ingredient" style="opacity:${0.35+weights[i]*0.65}">
+    <div class="ww">${n} 의 Value</div>
+    <div class="w">×${weights[i].toFixed(2)}</div>
+    <div class="vec v" style="justify-content:center;margin-top:8px;background:transparent;border:none">
+      ${V[n].map(x=>`<span class="n">${fmt(x)}</span>`).join('')}
+    </div>
+  </div>`).join('<div class="op" style="align-self:center">+</div>');
+document.getElementById('resultVec').innerHTML=
+  `<div class="vec" style="background:transparent;border:none;padding:0">
+    ${resVec.map(x=>`<span class="n" style="background:var(--good);color:#04140d">${fmt(x)}</span>`).join('')}
+   </div>`;
+
+// step4 히트맵 (모든 단어의 어텐션을 실제 Q·K·softmax 로 계산)
+function attnRow(qw){
+  const raw=names.map(n=>dot(Q[qw],K[n]));
+  const sc=raw.map(s=>s/scale);
+  const m=Math.max(...sc); const ex=sc.map(s=>Math.exp(s-m)); const su=ex.reduce((a,b)=>a+b,0);
+  return ex.map(e=>e/su);
+}
+const attnMatrix={};
+names.forEach(n=>attnMatrix[n]=attnRow(n));
+const heat=document.getElementById('heat');
+heat.style.gridTemplateColumns=`80px repeat(${names.length},54px)`;
+heat.innerHTML=
+  `<div class="hcell hhead"></div>`+
+  names.map(n=>`<div class="hcell hhead" style="font-size:12px">${n}</div>`).join('')+
+  names.map(rq=>{
+    const row=attnMatrix[rq];
+    return `<div class="hcell hhead" data-row="${rq}" style="justify-content:flex-end;padding-right:6px;cursor:pointer">${rq}${rq==="배"?" ★":""}</div>`+
+      row.map((w,ci)=>{
+        const g=Math.round(27+w*200), b=Math.round(35+w*220);
+        return `<div class="hcell" data-r="${rq}" style="background:rgb(${Math.round(20+w*30)},${g},${b});color:${w>0.4?'#04121f':'#cdd6ea'}">${(w*100).toFixed(0)}</div>`;
+      }).join('');
+  }).join('');
+let heatSel=null; // 같은 행 재클릭 시 강조 해제 (토글)
+heat.querySelectorAll('[data-row]').forEach(h=>{
+  h.onclick=()=>{
+    const r=h.dataset.row;
+    heatSel = (heatSel===r) ? null : r;
+    heat.querySelectorAll('[data-r]').forEach(c=>c.classList.toggle('dim', heatSel!==null && c.dataset.r!==heatSel));
+  };
+});
+
+// ---- STEP 6: PLAYGROUND ----
+// 글자에서 결정론적 임베딩(3차원) 생성
+function hashEmb(str){
+  let a=0,b=0,c=0;
+  for(let i=0;i<str.length;i++){
+    const ch=str.charCodeAt(i);
+    a+=Math.sin(ch*12.9898+i*0.7);
+    b+=Math.sin(ch*78.233 +i*1.3);
+    c+=Math.sin(ch*37.719 +i*2.1);
+  }
+  return [a,b,c].map(v=> +(0.35+Math.abs(Math.sin(v))*1.25).toFixed(2));
+}
+// 고정 가중치 행렬 (학습됐다고 가정)
+const Wq=[[0.9,0.1,0.3],[0.2,0.8,0.1],[0.1,0.3,0.9]];
+const Wk=[[0.8,0.2,0.1],[0.1,0.9,0.2],[0.3,0.1,0.8]];
+// 본편 proj와 동일한 행벡터 × 행렬 관행: out_j = Σ_i v_i·W[i][j]
+const matvec=(W,v)=>W[0].map((_,j)=>+v.reduce((s,x,i)=>s+x*W[i][j],0).toFixed(3));
+
+let pgTokens=[], pgFocusIdx=1;
+
+function pgCompute(){
+  const embs=pgTokens.map(hashEmb);
+  const Qs=embs.map(e=>matvec(Wq,e));
+  const Ks=embs.map(e=>matvec(Wk,e));
+  const q=Qs[pgFocusIdx]||Qs[0]||[0,0,0];
+  const raw=Ks.map(k=>q.reduce((s,x,i)=>s+x*k[i],0));
+  const scaled=raw.map(s=>s/Math.sqrt(3));
+  const mx=Math.max(...scaled);
+  const ex=scaled.map(s=>Math.exp(s-mx));
+  const sum=ex.reduce((a,b)=>a+b,0)||1;
+  return ex.map(e=>e/sum);
+}
+
+function pgRenderFocus(){
+  const el=document.getElementById('pgFocus');
+  el.innerHTML=pgTokens.map((t,i)=>
+    `<span class="fchip ${i===pgFocusIdx?'on':''}" data-i="${i}">${t}</span>`).join('')||'<span class="note">토큰을 입력하세요…</span>';
+  el.querySelectorAll('.fchip').forEach(c=>c.onclick=()=>{pgFocusIdx=+c.dataset.i; pgRender();});
+}
+function pgRenderBars(){
+  const w=pgCompute();
+  const mw=Math.max(...w);
+  document.getElementById('pgFocusName').textContent=pgTokens[pgFocusIdx]||'—';
+  document.getElementById('pgBars').innerHTML=pgTokens.map((t,i)=>`
+    <div class="pg-bar ${w[i]===mw?'win':''}">
+      <div class="bw">${t}${w[i]===mw?' 🏆':''}</div>
+      <div class="track"><div class="fill" style="width:${(w[i]*100).toFixed(1)}%"></div></div>
+      <div class="pct">${(w[i]*100).toFixed(1)}%</div>
+    </div>`).join('');
+}
+function pgRender(){ pgRenderFocus(); pgRenderBars(); }
+
+function pgParse(str){
+  pgTokens=str.trim().split(/\s+/).filter(Boolean).slice(0,12);
+  if(pgFocusIdx>=pgTokens.length) pgFocusIdx=Math.max(0,pgTokens.length-1);
+  pgRender();
+}
+const pgInput=document.getElementById('pgInput');
+pgInput.addEventListener('input',()=>pgParse(pgInput.value));
+document.getElementById('pgPresets').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  pgInput.value=b.dataset.s; pgFocusIdx=1; pgParse(b.dataset.s);
+});
+pgParse(pgInput.value);
+
+// ===== 텐서(한 덩어리) 뷰 =====
+const focusIdx = tokens.findIndex(t=>t.focus);
+function mxMatrix(data,opts={}){
+  const {rowLabs=[],colLabs=[],acc='var(--line)',title='',shape='',hlRow=-1,pct=false}=opts;
+  const cols=data[0].length, tmpl=`grid-template-columns:repeat(${cols},50px)`;
+  const head=colLabs.length?`<div class="mx-colhead" style="${tmpl}">${colLabs.map(c=>`<div class="h">${c}</div>`).join('')}</div>`:'';
+  const grid=`<div class="mx-grid" style="${tmpl}">`+
+    data.map((row,r)=>row.map(v=>`<div class="mx-cell ${r===hlRow?'hl':''}">${pct?Math.round(v*100):fmt(v)}</div>`).join('')).join('')+`</div>`;
+  const rl=rowLabs.length?`<div class="mx-rowlabs ${colLabs.length?'head-pad':''}">${rowLabs.map(l=>`<div class="mx-rowlab">${l}</div>`).join('')}</div>`:'';
+  return `<div class="mx" style="--acc:${acc}">${title?`<div class="mx-title">${title}</div>`:''}
+    <div class="mx-body">${rl}<div class="mx-colwrap">${head}<div class="mx-bracket">${grid}</div></div></div>
+    ${shape?`<div class="mx-shape">${shape}</div>`:''}</div>`;
+}
+const N=names.length;
+
+function renderMMTensor(){
+  const X=tokens.map(t=>t.emb), rl=tokens.map(t=>t.w+(t.focus?' <small>★</small>':''));
+  const A=mxMatrix(X,{rowLabs:rl,colLabs:['d1','d2','d3'],acc:'var(--hot)',title:'입력 X',shape:`[${N}×3]`});
+  const B=mxMatrix(Wmats.Q,{colLabs:['o1','o2','o3'],acc:'var(--q)',title:'W_Q',shape:'[3×3]'});
+  const C=mxMatrix(tokens.map(t=>Q[t.w]),{rowLabs:tokens.map(t=>t.w),colLabs:['Q1','Q2','Q3'],acc:'var(--q)',title:'Q (전체)',shape:`[${N}×3]`,hlRow:focusIdx});
+  document.getElementById('mmTensor').innerHTML=
+    `<div class="mx-op-row">${A}<div class="mx-bigop">×</div>${B}<div class="mx-bigop">=</div>${C}</div>
+     <p class="mx-note">단어 하나가 아니라 <b>${N}개 단어(X 전체)</b>가 똑같은 W<sub>Q</sub> 를 통과해 <b>한 번에</b> Q가 됩니다. (K·V도 W<sub>K</sub>·W<sub>V</sub> 로 동일) ★ 배 행이 위 단일 뷰에서 본 그 줄이에요.</p>`;
+}
+function renderS2Tensor(){
+  const Qm=names.map(n=>Q[n]);
+  const Kt=[0,1,2].map(j=>names.map(n=>K[n][j]));
+  const S=names.map(qi=>names.map(kj=>+dot(Q[qi],K[kj]).toFixed(2)));
+  const Att=names.map(n=>attnMatrix[n]);
+  const A=mxMatrix(Qm,{rowLabs:names,colLabs:['q1','q2','q3'],acc:'var(--q)',title:'Q',shape:`[${N}×3]`});
+  const B=mxMatrix(Kt,{rowLabs:['k1','k2','k3'],colLabs:names,acc:'var(--k)',title:'Kᵀ (전치)',shape:`[3×${N}]`});
+  const C=mxMatrix(S,{rowLabs:names,colLabs:names,acc:'#94a3b8',title:'점수 S',shape:`[${N}×${N}]`,hlRow:focusIdx});
+  const D=mxMatrix(Att,{rowLabs:names,colLabs:names,acc:'var(--good)',title:'어텐션 (행별 softmax, %)',shape:`[${N}×${N}]`,hlRow:focusIdx,pct:true});
+  document.getElementById('s2tensor').innerHTML=
+    `<div class="mx-op-row">${A}<div class="mx-bigop">×</div>${B}<div class="mx-bigop">=</div>${C}</div>
+     <div class="mx-flowtag">→ 각 점수 ÷√3 → <b style="color:#fff">행마다 Softmax</b> → 각 행의 합 = 100%</div>
+     <div class="mx-op-row">${D}</div>
+     <p class="mx-note"><b>모든 단어 × 모든 단어</b> 점수가 한 번에 [${N}×${N}] 행렬로 나옵니다. 행마다 softmax 하면 그게 바로 <b>Step 04 히트맵</b>이에요. ★ 배 행 = 단일 뷰에서 본 비중.</p>`;
+}
+function renderS3Tensor(){
+  const Att=names.map(n=>attnMatrix[n]);
+  const Vm=names.map(n=>V[n]);
+  const Out=names.map(qi=>{const w=attnMatrix[qi]; return [0,1,2].map(j=>+names.reduce((s,n,k)=>s+w[k]*V[n][j],0).toFixed(2));});
+  const A=mxMatrix(Att,{rowLabs:names,colLabs:names,acc:'var(--good)',title:'어텐션 (%)',shape:`[${N}×${N}]`,hlRow:focusIdx,pct:true});
+  const B=mxMatrix(Vm,{rowLabs:names,colLabs:['v1','v2','v3'],acc:'var(--v)',title:'V',shape:`[${N}×3]`});
+  const C=mxMatrix(Out,{rowLabs:names,colLabs:['o1','o2','o3'],acc:'var(--good)',title:'출력 (전체)',shape:`[${N}×3]`,hlRow:focusIdx});
+  document.getElementById('s3tensor').innerHTML=
+    `<div class="mx-op-row">${A}<div class="mx-bigop">×</div>${B}<div class="mx-bigop">=</div>${C}</div>
+     <p class="mx-note">어텐션 행렬 × V = <b>모든 단어의 업데이트된 벡터</b>가 한 번에 나옵니다. ★ 배 행이 위 "비빔밥 결과"와 같은 값이에요.</p>`;
+}
+function setupViewToggle(toggleId,singleId,tensorId,renderFn){
+  let done=false;
+  document.getElementById(toggleId).addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    const v=b.dataset.v;
+    document.querySelectorAll('#'+toggleId+' button').forEach(x=>x.classList.toggle('on',x===b));
+    if(v==='tensor'&&!done){ renderFn(); done=true; }
+    document.getElementById(singleId).style.display=v==='single'?'':'none';
+    document.getElementById(tensorId).style.display=v==='tensor'?'':'none';
+  });
+}
+setupViewToggle('mmViewToggle','mm','mmTensor',renderMMTensor);
+setupViewToggle('s2ViewToggle','s2single','s2tensor',renderS2Tensor);
+setupViewToggle('s3ViewToggle','s3single','s3tensor',renderS3Tensor);
+
+// 스텝 전환
+const stepper=document.getElementById('stepper');
+const panels=[...document.querySelectorAll('[data-panel]')];
+stepper.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  const s=b.dataset.s;
+  stepper.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));
+  panels.forEach(p=>p.classList.toggle('show',p.dataset.panel===s));
+  window.scrollTo({top:stepper.offsetTop-10,behavior:'smooth'});
+});
+</script>
+</body>
+</html>

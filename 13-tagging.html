@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13 시퀀스 레이블링 · NER · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 4 · NLP TASKS</div>
+    <h1>시퀀스 레이블링 — 단어마다 라벨 하나씩</h1>
+    <p class="intro">문장 분류(ch12)는 문장 전체에 라벨 <b>1개</b>를 붙였어요. 이번 장은 <b>단어 하나하나에 라벨을 붙이는</b> 시퀀스 레이블링입니다. 품사 태깅과 개체명 인식(NER)이 대표 선수예요. 핵심 무기는 앞뒤 문맥을 모두 보는 <b>양방향 RNN/LSTM</b> — 작은 숫자로 직접 굴려 봅시다. <span style="color:var(--faint)">(정석 구현은 LSTM이지만, 여기선 게이트를 뺀 단순 RNN 셀로 "양방향 결합" 원리에 집중해요. LSTM 게이트 자체는 <a href="06-rnn.html" style="color:var(--q)">CH 06</a>에서 다뤘습니다.)</span></p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 분류 vs 레이블링</button>
+    <button data-s="1">01 · 품사 태깅</button>
+    <button data-s="2">02 · 양방향 RNN</button>
+    <button data-s="3">03 · NER &amp; BIO</button>
+  </nav>
+
+  <!-- STEP 0 : 문장 분류 vs 시퀀스 레이블링 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Classification vs Labeling</span>
+    <h2>출력이 1개냐, 단어 수만큼이냐</h2>
+    <p class="lead">같은 문장을 넣어도 과제에 따라 출력 모양이 달라요. <b>분류는 다대일(many-to-one)</b>, <b>레이블링은 다대다(many-to-many)</b>. 아래에서 같은 문장이 두 방식으로 처리되는 걸 비교해 보세요.</p>
+    <div id="compareView"></div>
+    <div class="callout q" style="margin-top:18px">
+      <div class="ttl">무엇이 달라질까?</div>
+      <p>분류(ch12)에선 RNN의 <b>마지막 hidden 하나</b>만 분류기에 넣으면 끝이었어요. 레이블링에선 <b>모든 시점의 hidden</b>이 각자 분류기를 통과해 단어별 라벨을 만듭니다.</p>
+      <p>그래서 각 시점의 hidden이 <b>그 단어 주변 문맥</b>을 충분히 담고 있어야 해요 — 이게 Step 02 양방향(앞뒤 문맥)이 필요한 이유입니다.</p>
+    </div>
+  </section>
+
+  <!-- STEP 1 : 품사 태깅과 모호성 -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — POS Tagging</span>
+    <h2>품사 태깅 — 단어마다 품사 라벨 붙이기</h2>
+    <p class="lead">예문 <b>"나는 배를 타고 강을 건넌다"</b> 를 형태소로 쪼개 품사를 달아 봅시다. 칩을 <b>클릭</b>하면 설명이 나와요.</p>
+    <div class="row" style="gap:8px;margin-bottom:14px" id="posLegend"></div>
+    <div id="posView"></div>
+    <div id="posDetail" class="callout v" style="margin-top:18px"></div>
+    <div class="callout q">
+      <div class="ttl">'배'의 모호성 — 품사를 알아도 끝이 아니다</div>
+      <p>'배'가 <b>명사</b>라는 건 사전만 봐도 알아요. 하지만 과일 🍐 인지, 선박 🚢 인지, 신체 🤰 인지는 <b>단어 혼자서는 절대 알 수 없어요</b>. 이 문장에선 뒤의 <b class="h">"타고"</b> 를 봐야 "아, 타는 배구나 🚢" 가 됩니다.</p>
+      <p>이번 장에선 <b>양방향 RNN</b>이 이 문제를 어떻게 푸는지 봅니다(다음 스텝!). 뒤의 <a href="17-transformer.html" style="color:var(--q)">CH 17 트랜스포머</a>에서는 같은 '배'를 <b>어텐션</b>으로 다시 풀어요.</p>
+    </div>
+  </section>
+
+  <!-- STEP 2 : 양방향 LSTM -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — Bidirectional RNN</span>
+    <h2>'배'를 앞뒤에서 협공하기</h2>
+    <p class="lead">정방향(→)은 <b>과거 문맥</b>만, 역방향(←)은 <b>미래 문맥</b>만 봐요. 두 방향의 hidden을 <b>이어붙이면(concat)</b> '배를' 시점에서도 뒤의 "타고"가 보입니다. 토글로 비교해 보세요.</p>
+
+    <div class="callout v" style="margin-bottom:18px">
+      <div class="ttl">정직 고지 — 작지만 진짜 계산</div>
+      <p class="mono" style="color:var(--ink);font-size:12.5px;margin:0;line-height:1.9">
+        임베딩(2차원)·가중치는 교육용 <b>하드코딩</b> · hidden 계산은 전부 실제 JS 계산<br>
+        h<sub>t</sub> = tanh( W<sub>x</sub>·x<sub>t</sub> + W<sub>h</sub>·h<sub>t±1</sub> + b ) — 게이트를 뺀 단순 RNN 셀로 양방향 원리만 봅니다
+      </p>
+    </div>
+
+    <div class="view-toggle" id="biToggle">
+      <button data-v="fwd" class="on">→ 정방향만</button>
+      <button data-v="bi">⇄ 정방향 + 역방향</button>
+    </div>
+
+    <div id="viewFwd"></div>
+    <div id="viewBi" style="display:none"></div>
+  </section>
+
+  <!-- STEP 3 : NER + BIO -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — NER &amp; BIO Tagging</span>
+    <h2>개체명 인식 — 이름·날짜·장소를 찾아 라벨링</h2>
+    <p class="lead">NER(Named Entity Recognition)도 시퀀스 레이블링이에요. 예문 <b>"철수는 9월에 서울에서 삼성에 입사했다"</b> — 태그 칩을 <b>클릭</b>하면 설명이 나와요.</p>
+
+    <div id="nerView"></div>
+    <div id="nerDetail" class="callout good" style="margin-top:18px"></div>
+
+    <div class="sub" style="margin-top:8px">BIO 규칙 — 태그 머리글자의 뜻</div>
+    <div class="grid3" style="margin-bottom:22px">
+      <div class="card">
+        <h4 style="color:var(--q)">B = Begin</h4>
+        <div class="note" style="font-size:12.5px">개체명이 <b>시작</b>되는 단어. 예: <span class="mono">B-PER</span> = 사람 이름의 첫 단어.</div>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--hot)">I = Inside</h4>
+        <div class="note" style="font-size:12.5px">앞 개체명이 <b>이어지는</b> 단어. 예: "삼성 전자" 의 '전자' = <span class="mono">I-ORG</span>.</div>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--slate)">O = Outside</h4>
+        <div class="note" style="font-size:12.5px">개체명이 <b>아닌</b> 모든 단어. 조사·동사 등 대부분이 여기.</div>
+      </div>
+    </div>
+
+    <div class="sub">퀴즈 — 왜 B와 I를 구분할까?</div>
+    <div class="card" id="quiz1" style="margin-bottom:14px">
+      <div class="label">Q1. "삼성 전자 에 입사했다" — <b style="color:var(--ink)">'전자'</b> 의 태그는?</div>
+      <div class="row" style="gap:8px;margin:10px 0">
+        <button class="btn qopt" data-opt="B-ORG">B-ORG</button>
+        <button class="btn qopt" data-opt="I-ORG">I-ORG</button>
+        <button class="btn qopt" data-opt="O">O</button>
+      </div>
+      <div class="note qz-fb">선택해 보세요.</div>
+    </div>
+    <div class="card" id="quiz2">
+      <div class="label">Q2. "서울 부산 간 열차" — 도시 <b>두 개</b>가 나란히! <b style="color:var(--ink)">'부산'</b> 의 태그는?</div>
+      <div class="row" style="gap:8px;margin:10px 0">
+        <button class="btn qopt" data-opt="B-LOC">B-LOC</button>
+        <button class="btn qopt" data-opt="I-LOC">I-LOC</button>
+      </div>
+      <div class="note qz-fb">선택해 보세요.</div>
+    </div>
+    <p class="note" style="margin-top:16px">→ B/I 구분이 없으면 <b>"서울 부산"(개체 2개)</b>과 <b>"서울 시청"(개체 1개)</b>을 구분할 방법이 없어요. <b>B = 새 개체의 경계선</b>입니다.</p>
+  </section>
+
+  <p class="foot">// 모든 값은 브라우저에서 실제 계산 (임베딩·가중치는 교육용 하드코딩). · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '13 · Tagging');
+VZ.setupStepper();
+
+// ---- 공통 데이터: 예문 토큰 ----
+const SENT = ['나는', '배를', '타고', '강을', '건넌다'];
+const FOCUS = 1; // '배를'
+
+// ---------- STEP 0 : 분류 vs 레이블링 ----------
+(function(){
+  const wordChip = (w, hot) =>
+    `<span class="mono" style="display:inline-block;padding:7px 12px;border-radius:9px;font-size:13px;font-weight:700;
+      background:${hot ? 'rgba(251,191,36,.14)' : 'var(--panel)'};border:1px solid ${hot ? 'var(--hot)' : 'var(--line)'};
+      color:${hot ? 'var(--hot)' : 'var(--ink)'}">${w}</span>`;
+  const tagChip = (t, c) =>
+    `<span class="mono" style="display:inline-block;padding:4px 10px;border-radius:7px;font-size:11px;font-weight:700;
+      background:color-mix(in srgb, ${c} 13%, transparent);border:1px solid ${c};color:${c}">${t}</span>`;
+
+  const posTags = [['대명사+조사','var(--q)'],['명사+조사','var(--q)'],['동사+어미','var(--k)'],['명사+조사','var(--q)'],['동사+어미','var(--k)']];
+
+  const clsCard = `
+    <div class="card" style="padding:20px">
+      <div class="label" style="color:var(--k)">문장 분류 (ch12) — 다대일</div>
+      <div class="row" style="gap:6px">${SENT.map(w => wordChip(w, false)).join('')}</div>
+      <div class="arrow-v">↓ 문장 전체 → 라벨 <b style="color:var(--k)">1개</b></div>
+      <div style="text-align:center">${tagChip('주제: 이동/여행 🚣', 'var(--k)')}</div>
+    </div>`;
+
+  const lblCard = `
+    <div class="card" style="padding:20px">
+      <div class="label" style="color:var(--good)">시퀀스 레이블링 (ch13) — 다대다</div>
+      <div class="row" style="gap:14px;align-items:flex-start">${
+        SENT.map((w, i) => `<div style="display:flex;flex-direction:column;gap:8px;align-items:center">
+          ${wordChip(w, i === FOCUS)}
+          <span style="color:var(--faint);font-size:13px">↓</span>
+          ${tagChip(posTags[i][0], posTags[i][1])}
+        </div>`).join('')
+      }</div>
+      <p class="note" style="margin:14px 0 0">단어 5개 → 라벨 <b>5개</b>. 단어 수만큼 출력!</p>
+    </div>`;
+
+  document.getElementById('compareView').innerHTML =
+    `<div style="display:grid;gap:14px">${clsCard}${lblCard}</div>`;
+})();
+
+// ---------- STEP 1 : 품사 태깅 ----------
+(function(){
+  // 품사 → 색
+  const POS_COLOR = { '명사':'var(--q)', '대명사':'var(--q)', '조사':'var(--v)', '동사':'var(--k)', '어미':'var(--slate)' };
+  const WORDS = [
+    { word:'나는',  morphs:[ {m:'나',  p:'대명사', d:"말하는 사람 자신. 명사처럼 문장의 주체가 돼요."},
+                             {m:'는',  p:'조사',   d:"'나'에 붙어 주제임을 표시해요. 혼자서는 못 쓰여요."} ] },
+    { word:'배를',  morphs:[ {m:'배',  p:'명사',   focus:true,
+                              d:"품사는 명사로 확정! 하지만 의미는 🍐/🚢/🤰 중 무엇? — <b>문맥(타고!)</b>이 있어야 🚢 로 확정돼요. 뒤의 ch17에서 어텐션으로 다시 풀 바로 그 단어예요."},
+                             {m:'를',  p:'조사',   d:"'배'가 목적어임을 표시하는 조사예요."} ] },
+    { word:'타고',  morphs:[ {m:'타',  p:'동사',   d:"동작의 어간. '배'의 의미를 🚢 로 확정해 주는 결정적 단서!"},
+                             {m:'고',  p:'어미',   d:"동사 어간 뒤에 붙어 다음 동작으로 연결하는 어미예요."} ] },
+    { word:'강을',  morphs:[ {m:'강',  p:'명사',   d:"장소를 나타내는 명사. '배'가 🚢 라는 해석을 더 굳혀 줘요."},
+                             {m:'을',  p:'조사',   d:"'강'이 목적어임을 표시하는 조사예요."} ] },
+    { word:'건넌다', morphs:[ {m:'건너', p:'동사',  d:"문장의 핵심 동작. '강을 건넌다'까지 보면 이동 장면이 완성!"},
+                             {m:'ㄴ다', p:'어미',  d:"현재 시제로 문장을 끝맺는 종결어미예요."} ] }
+  ];
+
+  // 범례
+  document.getElementById('posLegend').innerHTML =
+    ['명사','조사','동사','어미'].map(p =>
+      `<span class="mono" style="font-size:11px;padding:3px 9px;border-radius:6px;font-weight:700;
+        background:transparent;border:1px solid ${POS_COLOR[p]};color:${POS_COLOR[p]}">${p}</span>`
+    ).join('') + `<span class="note" style="font-size:12px">(대명사는 명사와 같은 색)</span>`;
+
+  // 칩 렌더
+  const morphChip = (mo, wi, mi) => {
+    const c = POS_COLOR[mo.p];
+    return `<button data-w="${wi}" data-m="${mi}" class="mono" style="cursor:pointer;padding:8px 12px;border-radius:9px;
+      font-size:13px;font-weight:700;background:color-mix(in srgb, ${c} 11%, transparent);border:1.5px solid ${mo.focus ? 'var(--hot)' : c};color:${c};
+      ${mo.focus ? 'box-shadow:0 0 14px rgba(251,191,36,.35);' : ''}">
+      ${mo.m}<span style="font-size:10px;opacity:.8;margin-left:5px">${mo.p}</span></button>`;
+  };
+  document.getElementById('posView').innerHTML =
+    `<div class="row" style="gap:18px;align-items:flex-start">${
+      WORDS.map((w, wi) => `<div style="display:flex;flex-direction:column;gap:8px;align-items:center">
+        <div class="label">${w.word}</div>
+        <div style="display:flex;gap:4px">${w.morphs.map((mo, mi) => morphChip(mo, wi, mi)).join('')}</div>
+      </div>`).join('')
+    }</div>`;
+
+  const detail = document.getElementById('posDetail');
+  function showDetail(wi, mi){
+    const mo = WORDS[wi].morphs[mi];
+    detail.innerHTML = `<div class="ttl">'${mo.m}' — ${mo.p}</div><p>${mo.d}</p>`;
+  }
+  document.getElementById('posView').addEventListener('click', e => {
+    const b = e.target.closest('button[data-w]'); if (!b) return;
+    showDetail(+b.dataset.w, +b.dataset.m);
+  });
+  showDetail(1, 0); // 초기: '배'
+})();
+
+// ---------- STEP 2 : 양방향 RNN (실계산) ----------
+(function(){
+  // 하드코딩 임베딩 (2차원) — '배를'은 ch17의 배 임베딩 앞 2차원과 동일한 값
+  const EMB = {
+    '나는':   [ 0.5,  0.1],
+    '배를':   [ 0.7,  0.3],
+    '타고':   [-0.4,  0.8],
+    '강을':   [ 0.2, -0.6],
+    '건넌다': [-0.7,  0.5]
+  };
+  // 하드코딩 가중치 (방향별로 별도 파라미터 — 실제 BiLSTM도 두 방향 가중치가 독립)
+  const FW = { Wx: [[0.6, -0.3], [0.4, 0.7]], Wh: [[0.5, -0.2], [0.1, 0.6]], b: [0.05, -0.05] };
+  const BW = { Wx: [[-0.5, 0.4], [0.7, 0.2]], Wh: [[0.3, 0.4], [-0.3, 0.5]], b: [0.0, 0.1] };
+
+  // h_new = tanh(Wx·x + Wh·h + b) — 전부 실제 계산
+  const cell = (x, h, P) => [0, 1].map(r =>
+    +Math.tanh(
+      P.Wx[r][0]*x[0] + P.Wx[r][1]*x[1] +
+      P.Wh[r][0]*h[0] + P.Wh[r][1]*h[1] + P.b[r]
+    ).toFixed(4));
+
+  // 정방향: 왼→오
+  const fwd = SENT.reduce((acc, w) =>
+    [...acc, cell(EMB[w], acc.length ? acc[acc.length - 1] : [0, 0], FW)], []);
+  // 역방향: 오→왼 (계산 후 토큰 순서대로 재배열)
+  const bwdRev = [...SENT].reverse().reduce((acc, w) =>
+    [...acc, cell(EMB[w], acc.length ? acc[acc.length - 1] : [0, 0], BW)], []);
+  const bwd = [...bwdRev].reverse();
+
+  const embMx = VZ.mxMatrix(
+    [SENT.map(w => EMB[w][0]), SENT.map(w => EMB[w][1])],
+    { colLabs: SENT, rowLabs: ['emb<small>0</small>', 'emb<small>1</small>'],
+      acc: 'var(--v)', title: '입력 임베딩 (하드코딩)', shape: '[2×5]', hlCol: FOCUS });
+
+  const fwdMx = VZ.mxMatrix(
+    [SENT.map((_, i) => fwd[i][0]), SENT.map((_, i) => fwd[i][1])],
+    { colLabs: SENT, rowLabs: ['h&#8407;<small>0</small>', 'h&#8407;<small>1</small>'],
+      acc: 'var(--q)', title: '→ 정방향 hidden (왼→오 순차 계산)', shape: '[2×5]', hlCol: FOCUS });
+
+  const bwdMx = VZ.mxMatrix(
+    [SENT.map((_, i) => bwd[i][0]), SENT.map((_, i) => bwd[i][1])],
+    { colLabs: SENT, rowLabs: ['h&#8406;<small>0</small>', 'h&#8406;<small>1</small>'],
+      acc: 'var(--k)', title: '← 역방향 hidden (오→왼 순차 계산)', shape: '[2×5]', hlCol: FOCUS });
+
+  // ---- 뷰 1: 정방향만 ----
+  const fSeen = SENT.slice(0, FOCUS + 1).join(', ');
+  const fUnseen = SENT.slice(FOCUS + 1).join(', ');
+  document.getElementById('viewFwd').innerHTML = `
+    <div class="mx-op-row">${embMx}${fwdMx}</div>
+    <div class="mx-flowtag">강조된 열 = '배를' 시점</div>
+    <div class="callout k" style="background:rgba(251,113,133,.06);border-color:rgba(251,113,133,.25)">
+      <div class="ttl" style="color:var(--k)">정방향만의 한계</div>
+      <p>'배를' 시점의 정방향 hidden <b class="mono">h&#8407; = [${VZ.fmt(fwd[FOCUS][0])}, ${VZ.fmt(fwd[FOCUS][1])}]</b> 는
+      지금까지 읽은 <b style="color:var(--q)">${fSeen}</b> 만 반영해요.</p>
+      <p>아직 안 읽은 <b style="color:var(--k)">${fUnseen}</b> 는 전혀 모릅니다 —
+      <b>"타고"를 못 봤으니 '배'가 🚢 인지 알 길이 없어요.</b> 위 토글에서 <b>⇄ 정방향 + 역방향</b>을 켜 보세요.</p>
+    </div>`;
+
+  // ---- 뷰 2: 양방향 ----
+  const concat = [...fwd[FOCUS], ...bwd[FOCUS]];
+  const concatCells = concat.map((v, i) =>
+    `<div class="n" style="background:${i < 2 ? 'var(--q)' : 'var(--k)'}">${VZ.fmt(v)}</div>`).join('');
+  // 역방향이 '배를'에 도달하기까지의 경로 (실계산 값 표시)
+  const bChain = [4, 3, 2, 1].map(i =>
+    `${SENT[i]} <span class="mono" style="color:var(--k)">[${VZ.fmt(bwd[i][0])}, ${VZ.fmt(bwd[i][1])}]</span>`
+  ).join(' &nbsp;→&nbsp; ');
+
+  document.getElementById('viewBi').innerHTML = `
+    <div class="mx-op-row">${fwdMx}${bwdMx}</div>
+    <div class="mx-flowtag">강조된 열 = '배를' 시점 — 두 방향의 hidden 을 이어붙입니다</div>
+    <div class="row" style="gap:14px;margin:6px 0 18px">
+      <div class="vec q"><div class="n">${VZ.fmt(fwd[FOCUS][0])}</div><div class="n">${VZ.fmt(fwd[FOCUS][1])}</div></div>
+      <span class="op">⊕</span>
+      <div class="vec k"><div class="n">${VZ.fmt(bwd[FOCUS][0])}</div><div class="n">${VZ.fmt(bwd[FOCUS][1])}</div></div>
+      <span class="op">=</span>
+      <div class="vec"><div style="display:flex;gap:3px">${concatCells}</div></div>
+      <span class="mx-shape" style="color:var(--good)">[4] = '배를'의 양방향 표현</span>
+    </div>
+    <div class="callout good">
+      <div class="ttl">이제 '타고'가 보인다</div>
+      <p>역방향은 문장 끝에서 출발해 <b>${bChain}</b> 순서로 hidden 을 갱신하며 왔어요.
+      '배를' 시점의 역방향 hidden 에는 <b class="h">"타고"</b>(그리고 강을·건넌다)의 정보가 이미 들어 있습니다.</p>
+      <p>concat 된 4차원 벡터를 단어별 분류기에 넣으면, '배' 가 <b>과거 문맥 + 미래 문맥</b>을 모두 안은 채 태깅돼요.
+      이게 양방향 RNN/LSTM 으로 품사 태깅·NER 을 하는 이유입니다.</p>
+    </div>`;
+
+  VZ.setupViewToggle('#biToggle', { fwd: '#viewFwd', bi: '#viewBi' });
+})();
+
+// ---------- STEP 3 : NER + BIO ----------
+(function(){
+  const NER = [
+    { w:'철수는',  ent:'철수', tag:'B-PER',  c:'var(--pink)',
+      d:"<b>PER(사람)</b> 개체의 시작(B). 조사 '는' 을 뺀 '철수' 가 사람 이름이에요." },
+    { w:'9월에',   ent:'9월',  tag:'B-DATE', c:'var(--hot)',
+      d:"<b>DATE(날짜)</b> 개체의 시작(B). 시간 표현도 어엿한 개체명입니다." },
+    { w:'서울에서', ent:'서울', tag:'B-LOC',  c:'var(--blue)',
+      d:"<b>LOC(장소)</b> 개체의 시작(B). '서울' 만 떼어 장소로 인식해요." },
+    { w:'삼성에',  ent:'삼성', tag:'B-ORG',  c:'var(--v)',
+      d:"<b>ORG(조직)</b> 개체의 시작(B). 만약 '삼성 전자' 였다면 '전자' 는 I-ORG 가 됩니다." },
+    { w:'입사했다', ent:null,  tag:'O',      c:'var(--slate)',
+      d:"<b>O(Outside)</b> — 개체명이 아닌 일반 단어. 동사·조사 등 문장 대부분이 O 예요." }
+  ];
+
+  document.getElementById('nerView').innerHTML =
+    `<div class="row" style="gap:14px;align-items:flex-start">${
+      NER.map((t, i) => `<div style="display:flex;flex-direction:column;gap:8px;align-items:center">
+        <span class="mono" style="padding:8px 13px;border-radius:9px;font-size:14px;font-weight:700;
+          background:${t.ent ? `color-mix(in srgb, ${t.c} 13%, transparent)` : 'var(--panel-2)'};border:1.5px solid ${t.ent ? t.c : 'var(--line)'};
+          color:${t.ent ? t.c : 'var(--muted)'}">${t.w}</span>
+        <button data-i="${i}" class="mono" style="cursor:pointer;padding:4px 10px;border-radius:7px;font-size:11px;
+          font-weight:700;background:transparent;border:1px solid ${t.c};color:${t.c}">${t.tag}</button>
+      </div>`).join('')
+    }</div>`;
+
+  const detail = document.getElementById('nerDetail');
+  function showNer(i){
+    const t = NER[i];
+    detail.innerHTML = `<div class="ttl" style="color:${t.c}">${t.w} → ${t.tag}</div><p>${t.d}</p>`;
+  }
+  document.getElementById('nerView').addEventListener('click', e => {
+    const b = e.target.closest('button[data-i]'); if (!b) return;
+    showNer(+b.dataset.i);
+  });
+  showNer(0);
+
+  // ---- 퀴즈 ----
+  function setupQuiz(sel, correct, explain){
+    const box = document.querySelector(sel);
+    box.addEventListener('click', e => {
+      const b = e.target.closest('button.qopt'); if (!b) return;
+      const ok = b.dataset.opt === correct;
+      box.querySelectorAll('button.qopt').forEach(x => {
+        x.style.borderColor = 'var(--line)'; x.style.background = 'transparent'; x.style.color = 'var(--muted)';
+      });
+      const col = ok ? 'var(--good)' : 'var(--k)';
+      b.style.borderColor = col; b.style.color = col;
+      b.style.background = ok ? 'rgba(52,211,153,.12)' : 'rgba(251,113,133,.12)';
+      box.querySelector('.qz-fb').innerHTML =
+        (ok ? `<b style="color:var(--good)">정답! ✓</b> ` : `<b style="color:var(--k)">땡! 정답은 ${correct}.</b> `) + explain;
+    });
+  }
+  setupQuiz('#quiz1', 'I-ORG',
+    `'삼성 전자' 는 <b>한 덩어리 조직명</b>이라 '전자' 는 앞 개체가 <b>이어지는(Inside)</b> 단어예요. B-ORG 를 또 달면 '삼성' 과 '전자' 가 별개 회사 둘이 돼 버립니다.`);
+  setupQuiz('#quiz2', 'B-LOC',
+    `'서울' 과 '부산' 은 <b>서로 다른 개체 2개</b>! '부산' 에 I-LOC 를 달면 "서울부산" 이라는 한 지명으로 합쳐져 버려요. 새 개체가 시작될 땐 반드시 <b>B</b> — 이게 B/I 를 구분하는 이유입니다.`);
+})();
+</script>
+</body>
+</html>

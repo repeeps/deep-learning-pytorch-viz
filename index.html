@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>딥러닝, 눈으로 보기 · 인터랙티브 시각화</title>
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  .hero{text-align:center; padding:30px 0 10px;}
+  .hero .tag{font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.25em; text-transform:uppercase; color:var(--q);}
+  .hero h1{font-size:clamp(32px,6vw,56px); font-weight:800; letter-spacing:-.03em; margin:14px 0 12px; line-height:1.05;
+    background:linear-gradient(100deg,#fff,#9bb6ff 55%,var(--v)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .hero p{color:var(--muted); max-width:640px; margin:0 auto; font-size:16px;}
+  .seclabel{font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--muted); margin:46px 0 16px; padding-bottom:8px; border-bottom:1px solid var(--line);}
+  .cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px;}
+  .ccard{display:block; text-decoration:none; background:var(--panel); border:1px solid var(--line); border-radius:18px;
+    padding:22px; transition:.22s; position:relative; overflow:hidden;}
+  .ccard::before{content:''; position:absolute; inset:0 auto 0 0; width:4px; background:var(--accent,var(--q)); opacity:.8;}
+  .ccard:hover{transform:translateY(-4px); border-color:var(--accent,var(--q)); box-shadow:0 14px 36px rgba(0,0,0,.35);}
+  .ccard .num{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent,var(--q)); font-weight:700;}
+  .ccard h3{margin:8px 0 8px; font-size:19px; color:var(--ink); letter-spacing:-.01em;}
+  .ccard p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.6;}
+  .ccard .chips{margin-top:14px; display:flex; gap:6px; flex-wrap:wrap;}
+  .ccard .chip{font-family:'JetBrains Mono',monospace; font-size:10px; padding:3px 8px; border-radius:6px;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--muted);}
+  .foot{margin-top:60px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="tag">Deep Learning · Visualized · Interactive</div>
+    <h1>딥러닝, 눈으로 보기</h1>
+    <p>텐서부터 LLM까지 — 딥러닝의 핵심 개념을 가짜 도식이 아니라 <b style="color:var(--hot)">브라우저에서 실제로 계산되는 숫자</b>로 직접 돌려보며 익히는 인터랙티브 학습 자료입니다.</p>
+  </div>
+
+  <div class="seclabel">PART 1 · 파이토치 · 머신러닝 기초</div>
+  <div class="cards">
+    <a class="ccard" style="--accent:var(--hot)" href="01-tensor.html">
+      <div class="num">01</div><h3>텐서 다루기</h3>
+      <p>reshape·squeeze·브로드캐스팅이 숫자를 어떻게 옮기는지. 모양은 바뀌어도 데이터는 그대로.</p>
+      <div class="chips"><span class="chip">reshape</span><span class="chip">broadcast</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--q)" href="02-regression.html">
+      <div class="num">02</div><h3>선형회귀 · 경사하강법</h3>
+      <p>직선을 데이터에 맞춰가는 과정. 손실이 줄며 기울기가 움직이는 걸 직접 학습시켜 보기.</p>
+      <div class="chips"><span class="chip">gradient descent</span><span class="chip">autograd</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--k)" href="03-classification.html">
+      <div class="num">03</div><h3>분류 — 로지스틱 · 소프트맥스</h3>
+      <p>직선 긋기에서 확률 말하기로. 시그모이드 결정경계와 크로스엔트로피의 벌점 구조.</p>
+      <div class="chips"><span class="chip">sigmoid</span><span class="chip">cross-entropy</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--good)" href="04-neuralnet.html">
+      <div class="num">04</div><h3>신경망 · 역전파</h3>
+      <p>순전파로 예측하고 역전파로 오차를 거꾸로 흘려보내며 가중치를 고치는 학습의 심장.</p>
+      <div class="chips"><span class="chip">forward</span><span class="chip">backprop</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--v)" href="05-training.html">
+      <div class="num">05</div><h3>옵티마이저 · 과적합</h3>
+      <p>SGD가 갇히는 골짜기를 모멘텀·Adam이 탈출하는 경주. 다항식 차수로 보는 과적합 U자.</p>
+      <div class="chips"><span class="chip">Adam</span><span class="chip">dropout</span></div>
+    </a>
+  </div>
+
+  <div class="seclabel">PART 2 · 신경망 구조</div>
+  <div class="cards">
+    <a class="ccard" style="--accent:var(--v)" href="06-rnn.html">
+      <div class="num">06</div><h3>순환 신경망 (RNN · LSTM)</h3>
+      <p>시간을 따라 펼쳐지는 순환 구조와, 기억을 조절하는 LSTM의 게이트.</p>
+      <div class="chips"><span class="chip">unroll</span><span class="chip">gate</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--pink)" href="07-cnn.html">
+      <div class="num">07</div><h3>합성곱 신경망 (CNN)</h3>
+      <p>커널이 이미지를 훑으며 특징을 뽑는 합성곱과 풀링. 필터 한 칸씩 슬라이딩.</p>
+      <div class="chips"><span class="chip">convolution</span><span class="chip">pooling</span></div>
+    </a>
+  </div>
+
+  <div class="seclabel">PART 3 · 자연어 처리 기초</div>
+  <div class="cards">
+    <a class="ccard" style="--accent:var(--hot)" href="08-preprocessing.html">
+      <div class="num">08</div><h3>자연어 전처리</h3>
+      <p>토큰화→정제→정수 인코딩→패딩. 문장이 모델에 들어갈 텐서가 되기까지의 파이프라인.</p>
+      <div class="chips"><span class="chip">tokenize</span><span class="chip">padding</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--q)" href="09-languagemodel.html">
+      <div class="num">09</div><h3>언어 모델 · N-gram</h3>
+      <p>다음 단어 맞추기 기계. 바이그램 확률로 문장을 직접 생성하고 펄플렉서티로 평가.</p>
+      <div class="chips"><span class="chip">N-gram</span><span class="chip">perplexity</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--blue)" href="10-similarity.html">
+      <div class="num">10</div><h3>TF-IDF · 코사인 유사도</h3>
+      <p>문서를 벡터로 만들고(BoW·TF-IDF), 각도로 닮은 정도를 재는 추천의 기본기.</p>
+      <div class="chips"><span class="chip">TF-IDF</span><span class="chip">cosine</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--v)" href="11-word2vec.html">
+      <div class="num">11</div><h3>워드 임베딩 (Word2Vec)</h3>
+      <p>"주변 단어로 의미를 배운다." 단어가 벡터 공간의 좌표가 되는 과정.</p>
+      <div class="chips"><span class="chip">CBOW</span><span class="chip">skip-gram</span></div>
+    </a>
+  </div>
+
+  <div class="seclabel">PART 4 · NLP 모델 응용</div>
+  <div class="cards">
+    <a class="ccard" style="--accent:var(--good)" href="12-textclassification.html">
+      <div class="num">12</div><h3>텍스트 분류 — 감성분석</h3>
+      <p>RNN이 리뷰를 읽고 긍/부정을 판정하기까지. 1D CNN의 n-gram 검출기 관점도.</p>
+      <div class="chips"><span class="chip">sentiment</span><span class="chip">1D CNN</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--k)" href="13-tagging.html">
+      <div class="num">13</div><h3>시퀀스 레이블링 — 태깅·NER</h3>
+      <p>단어마다 라벨 하나씩. 양방향 RNN이 앞뒤 문맥을 협공해 모호성을 푸는 법.</p>
+      <div class="chips"><span class="chip">BiRNN</span><span class="chip">BIO</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--hot)" href="14-bpe.html">
+      <div class="num">14</div><h3>서브워드 토크나이저 (BPE)</h3>
+      <p>빈도 기반 글자쌍 병합을 단계별 실행. OOV가 의미 단위로 쪼개지는 마법.</p>
+      <div class="chips"><span class="chip">BPE</span><span class="chip">WordPiece</span></div>
+    </a>
+  </div>
+
+  <div class="seclabel">PART 5 · 시퀀스 · 어텐션 · 트랜스포머</div>
+  <div class="cards">
+    <a class="ccard" style="--accent:var(--blue)" href="15-seq2seq.html">
+      <div class="num">15</div><h3>Seq2Seq · BLEU</h3>
+      <p>읽는 RNN과 쓰는 RNN의 협업. 자기회귀 생성과 번역 품질 점수 BLEU.</p>
+      <div class="chips"><span class="chip">encoder-decoder</span><span class="chip">BLEU</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--k)" href="16-attention.html">
+      <div class="num">16</div><h3>어텐션 메커니즘</h3>
+      <p>디코더가 매 순간 입력의 어느 부분에 집중할지 가중치로 고르는 과정.</p>
+      <div class="chips"><span class="chip">dot-product</span><span class="chip">alignment</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--q)" href="17-transformer.html">
+      <div class="num">17</div><h3>트랜스포머 · 셀프어텐션</h3>
+      <p>Q·K·V로 모든 단어가 서로를 탐색하고 섞이는 전 과정.</p>
+      <div class="chips"><span class="chip">self-attention</span><span class="chip">softmax</span></div>
+    </a>
+  </div>
+
+  <div class="seclabel">PART 6 · LLM 시대</div>
+  <div class="cards">
+    <a class="ccard" style="--accent:var(--v)" href="18-pretrained.html">
+      <div class="num">18</div><h3>사전훈련 언어모델 — BERT · GPT</h3>
+      <p>먼저 언어를 배우고, 나중에 일을 배운다. 빈칸 맞추기(MLM)와 다음 단어 잇기.</p>
+      <div class="chips"><span class="chip">MLM</span><span class="chip">fine-tune</span></div>
+    </a>
+    <a class="ccard" style="--accent:var(--good)" href="19-llm.html">
+      <div class="num">19</div><h3>LLM 실전 — LoRA · RAG</h3>
+      <p>거대한 W는 얼리고 곁가지만 학습하는 LoRA, 찾아서 읽고 답하는 RAG, 그리고 전략 선택.</p>
+      <div class="chips"><span class="chip">LoRA</span><span class="chip">RAG</span></div>
+    </a>
+  </div>
+
+  <p class="foot">// 딥러닝 핵심 개념을 직접 만든 비영리 인터랙티브 학습 자료 · 모든 수치는 브라우저에서 실시간 계산</p>
+</div>
+</body>
+</html>

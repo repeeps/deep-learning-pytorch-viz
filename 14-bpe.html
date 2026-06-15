@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>14 서브워드 토크나이저 BPE · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  /* 이 페이지 전용: 토큰 칩 */
+  .tok{display:inline-flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace;
+    font-size:13px; font-weight:700; padding:4px 9px; border-radius:7px; margin:2px;
+    background:#243049; color:var(--ink); border:1px solid var(--line);}
+  .tok.new{background:rgba(251,191,36,.18); border-color:var(--hot); color:var(--hot);}
+  .tok.eow{color:var(--faint); font-weight:400;}
+  .tok.eow.new{color:var(--hot); font-weight:700;}
+  .tok.unk{background:rgba(251,113,133,.15); border-color:var(--k); color:var(--k);}
+  .tok.final{background:rgba(52,211,153,.15); border-color:var(--good); color:var(--good); font-size:15px; padding:7px 14px; font-weight:700;}
+  .wordrow{display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px dashed var(--line); flex-wrap:wrap;}
+  .wordrow:last-child{border-bottom:none;}
+  .wordrow .wname{font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--muted); min-width:110px;}
+  .wordrow .wname b{color:var(--ink);}
+  .vocabbox{display:flex; flex-wrap:wrap; gap:2px; margin-top:6px;}
+  .histitem{font-family:'JetBrains Mono',monospace; font-size:13px; padding:6px 10px; border-radius:8px;
+    background:var(--panel); border:1px solid var(--line); margin:4px 0; color:var(--muted);}
+  .histitem b{color:var(--hot);}
+  .histitem.latest{border-color:var(--hot); color:var(--ink);}
+  .ctrlbar{display:flex; gap:10px; flex-wrap:wrap; margin:14px 0 18px;}
+  button.btn.ghost{border-color:var(--line); background:var(--panel-2); color:var(--muted);}
+  button.btn.ghost:hover{background:var(--panel); color:var(--ink); border-color:var(--q);}
+  button.btn:disabled{opacity:.35; cursor:default;}
+  button.btn:disabled:hover{background:rgba(55,189,248,.12); color:var(--q);}
+  input.wordinput{font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; padding:10px 14px;
+    border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--ink); width:200px; outline:none;}
+  input.wordinput:focus{border-color:var(--q);}
+  .applyrow{display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px dashed var(--line); flex-wrap:wrap;}
+  .applyrow .rno{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--q); min-width:118px;}
+  .cmp{width:100%; border-collapse:collapse; font-size:13.5px; margin-top:10px;}
+  .cmp th,.cmp td{padding:10px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top;}
+  .cmp th{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-family:'JetBrains Mono',monospace;}
+  .cmp td:first-child{font-weight:700; white-space:nowrap;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 4 · NLP TASKS</div>
+    <h1>서브워드 토크나이저 — BPE가 단어를 쪼개는 법</h1>
+    <p class="intro">사전에 없는 단어를 만나면 모델은 <b>&lt;unk&gt;</b>(모름)라고 답할 수밖에 없어요. <b>BPE(Byte Pair Encoding)</b>는 "자주 같이 나오는 글자쌍을 병합"하는 단순한 규칙으로, 처음 보는 단어도 <b>의미 있는 조각(서브워드)</b>으로 쪼개 줍니다. 병합 한 번 한 번을 직접 눌러 보면서 확인해요.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · OOV 문제</button>
+    <button data-s="1">01 · BPE 병합 실행</button>
+    <button data-s="2">02 · 새 단어 토큰화</button>
+    <button data-s="3">03 · BPE 가족</button>
+  </nav>
+
+  <!-- STEP 0 : OOV -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--k)">Step 00 — Out-Of-Vocabulary</span>
+    <h2>사전에 없는 단어는 전부 &lt;unk&gt;가 됩니다</h2>
+    <p class="lead">단어 단위 사전으로 학습한 모델은 <b>훈련 때 본 적 없는 단어(OOV)</b>를 처리할 수 없어요. low·lower는 알아도 <b>lowest</b>는 모르는 상황을 봅시다.</p>
+
+    <div class="callout q">
+      <div class="ttl">단어 사전 = { low, lower, newest, widest, ... }</div>
+      <p>입력 문장: <code>this hotel has the lowest price</code></p>
+      <p style="margin-top:6px">
+        <span class="tok">this</span><span class="tok">hotel</span><span class="tok">has</span><span class="tok">the</span>
+        <span class="tok unk">&lt;unk&gt;</span><span class="tok">price</span>
+        &nbsp;← <b>lowest</b>가 사전에 없어서 정보가 통째로 사라져요.
+      </p>
+      <p>사람이라면 low(낮다) + est(최상급)로 짐작할 수 있는데, 모델은 그 기회를 잃습니다. 이게 <b>OOV 문제</b>예요.</p>
+    </div>
+
+    <p class="sub">단위별 트레이드오프</p>
+    <table class="cmp">
+      <tr><th>단위</th><th>예: lowest →</th><th>장점</th><th>단점</th></tr>
+      <tr>
+        <td style="color:var(--k)">단어 단위</td>
+        <td><span class="tok unk">&lt;unk&gt;</span></td>
+        <td>한 토큰에 의미가 온전히 담김, 시퀀스가 짧음</td>
+        <td><b style="color:var(--k)">OOV에 무력</b>, 사전이 수십만 개로 폭발 (low/lower/lowest 전부 별개)</td>
+      </tr>
+      <tr>
+        <td style="color:var(--slate)">글자 단위</td>
+        <td><span class="tok">l</span><span class="tok">o</span><span class="tok">w</span><span class="tok">e</span><span class="tok">s</span><span class="tok">t</span></td>
+        <td>OOV가 아예 없음 (모든 단어를 글자로 표현 가능)</td>
+        <td>토큰 하나에 의미가 거의 없음, <b style="color:var(--k)">시퀀스가 너무 길어짐</b></td>
+      </tr>
+      <tr>
+        <td style="color:var(--good)">서브워드</td>
+        <td><span class="tok final">low</span><span class="tok final">est</span></td>
+        <td><b style="color:var(--good)">둘의 절충</b> — OOV는 의미 조각으로 분해, 자주 쓰는 단어는 통째로 유지</td>
+        <td>"어디서 쪼갤지"를 데이터에서 배워야 함 → 그 방법이 <b>BPE</b></td>
+      </tr>
+    </table>
+    <p class="note" style="margin-top:14px">→ 다음 스텝에서 BPE가 코퍼스 통계만으로 <b>쪼개는 위치를 스스로 학습</b>하는 과정을 직접 실행해 봅니다.</p>
+  </section>
+
+  <!-- STEP 1 : BPE merge -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — BPE Training</span>
+    <h2>가장 빈번한 글자쌍을 한 단계씩 병합</h2>
+    <p class="lead">고전 예제 코퍼스 <code class="mono">{low:5, lower:2, newest:6, widest:3}</code>. 각 단어를 글자로 분해하고 끝에 <code class="mono">&lt;/w&gt;</code>(단어 경계)를 붙인 뒤, <b>"가장 자주 등장하는 인접 쌍 병합"</b>을 반복합니다. 아래 카운트는 전부 브라우저에서 실시간 계산돼요.</p>
+
+    <div class="ctrlbar">
+      <button class="btn" id="btnMerge">▶ 다음 병합</button>
+      <button class="btn ghost" id="btnAll">⏩ 끝까지 (10회)</button>
+      <button class="btn ghost" id="btnReset">↺ 리셋</button>
+    </div>
+
+    <div class="grid3" style="grid-template-columns:1fr; gap:14px">
+      <div class="card">
+        <h4 style="color:var(--q)">① 코퍼스 — 단어별 현재 표기 <span class="label" style="display:inline" id="stepBadge"></span></h4>
+        <div id="corpusView"></div>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--hot)">② 인접 쌍 빈도 (실계산) — 다음 병합 후보</h4>
+        <div id="pairView"></div>
+      </div>
+    </div>
+    <div class="grid3" style="grid-template-columns:1fr 1fr; gap:14px; margin-top:14px">
+      <div class="card">
+        <h4 style="color:var(--good)">③ 병합 규칙 히스토리</h4>
+        <div id="histView"></div>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--v)">④ 어휘 집합 (현재 심볼)</h4>
+        <div class="vocabbox" id="vocabView"></div>
+        <p class="note" style="margin-top:10px" id="vocabNote"></p>
+      </div>
+    </div>
+    <p class="note" style="margin-top:16px">→ 첫 병합이 <b>e+s</b>인 이유: <code class="mono">newest×6 + widest×3 = 9회</code>로 최빈 쌍이기 때문이에요(s+t, t+&lt;/w&gt;도 9회지만 먼저 발견된 쌍을 택함). 병합을 거듭할수록 <b>est&lt;/w&gt;, low</b> 같은 의미 단위가 저절로 떠오릅니다.</p>
+  </section>
+
+  <!-- STEP 2 : tokenize new word -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--good)">Step 02 — Tokenize</span>
+    <h2>학습된 규칙으로 새 단어 토큰화</h2>
+    <p class="lead">학습이 끝나면 남는 건 <b>순서가 있는 병합 규칙 목록</b>뿐. 새 단어를 글자로 분해한 뒤 규칙을 <b>학습된 순서대로</b> 적용하면 끝이에요. 코퍼스에 없던 <b>lowest</b>를 넣어 보세요.</p>
+
+    <div class="ctrl" style="margin-bottom:18px">
+      <input class="wordinput" id="wordInput" value="lowest" maxlength="14" spellcheck="false">
+      <button class="btn" id="btnTok">토큰화 실행</button>
+      <span class="note">영문 소문자만 · 예: lowest, newer, widest, lowers</span>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h4 style="color:var(--q)">규칙 적용 과정 (Step 01에서 학습한 10개 규칙, 순서대로)</h4>
+      <div id="tokSteps"></div>
+    </div>
+    <div class="card">
+      <h4 style="color:var(--good)">최종 서브워드 토큰</h4>
+      <div id="tokFinal"></div>
+      <p class="note" id="tokNote" style="margin-top:10px"></p>
+    </div>
+  </section>
+
+  <!-- STEP 3 : BPE family -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--v)">Step 03 — BPE Family</span>
+    <h2>BPE의 형제들 — WordPiece · SentencePiece</h2>
+    <p class="lead">"서브워드로 쪼갠다"는 아이디어는 같지만, <b>무엇을 기준으로 병합할지</b>와 <b>공백을 어떻게 다룰지</b>가 달라요.</p>
+
+    <div class="grid3">
+      <div class="card">
+        <h4 style="color:var(--q)">BPE</h4>
+        <p class="note"><b>빈도</b> 기반 — 가장 자주 나오는 쌍을 병합 (방금 실행한 그 알고리즘). 규칙이 단순하고 결정적이라 GPT 계열이 채택했어요. GPT-2부터는 글자 대신 <b>바이트</b>에서 시작하는 byte-level BPE로 어떤 문자든 OOV 없이 처리해요.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--k)">WordPiece</h4>
+        <p class="note"><b>가능도(likelihood)</b> 기반 — 단순 빈도가 아니라 <b>병합했을 때 코퍼스 확률이 가장 많이 오르는 쌍</b>을 선택해요. 단어 중간 조각엔 <code class="mono">##</code> 접두를 붙입니다. 예: playing → <code class="mono">play + ##ing</code>. BERT의 토크나이저예요.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--good)">SentencePiece</h4>
+        <p class="note"><b>공백도 그냥 문자(▁)로 취급</b> — 띄어쓰기 전처리 없이 원문에 바로 BPE/Unigram을 돌려요. 그래서 띄어쓰기가 없는 <b>한국어·일본어·중국어</b>에도 언어 무관하게 적용 가능. 예: 안녕하세요 → <code class="mono">▁안녕 + 하 + 세요</code>.</p>
+      </div>
+    </div>
+
+    <p class="sub" style="margin-top:22px">실제 모델은 무엇을 쓸까?</p>
+    <table class="cmp">
+      <tr><th>모델</th><th>토크나이저</th><th>비고</th></tr>
+      <tr><td style="color:var(--q)">GPT-2 / GPT-3 / GPT-4</td><td>BPE (byte-level)</td><td>바이트에서 시작 → 진정한 OOV 제로</td></tr>
+      <tr><td style="color:var(--k)">BERT / DistilBERT / ELECTRA</td><td>WordPiece</td><td>##접두로 단어 내부 조각 표시</td></tr>
+      <tr><td style="color:var(--good)">T5 / ALBERT / XLNet</td><td>SentencePiece (Unigram)</td><td>큰 어휘에서 시작해 깎아내리는 방식</td></tr>
+      <tr><td style="color:var(--good)">LLaMA 1·2</td><td>SentencePiece (BPE)</td><td>SentencePiece 틀 안에서 BPE 병합 사용 (LLaMA 3부턴 tiktoken 계열 BPE)</td></tr>
+      <tr><td style="color:var(--v)">RoBERTa / BART</td><td>BPE (byte-level)</td><td>GPT-2 토크나이저 계승</td></tr>
+    </table>
+    <p class="note" style="margin-top:14px">→ 어느 쪽이든 핵심은 같아요: <b>자주 쓰는 패턴은 통째로, 처음 보는 단어는 배운 조각으로</b>. Step 02에서 lowest = low + est&lt;/w&gt; 로 쪼개진 것이 바로 그 원리입니다.</p>
+  </section>
+
+  <p class="foot">// 모든 병합·카운트는 브라우저에서 실제 계산. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '14 · Subword');
+VZ.setupStepper();
+
+// ============================================================
+// BPE 코어 — 코퍼스만 하드코딩, 나머지는 전부 실계산
+// ============================================================
+const CORPUS = { low:5, lower:2, newest:6, widest:3 };
+const EOW = '</w>';
+const SEP = '\u0001';                 // 쌍 키 구분자 — 토큰에 절대 등장하지 않는 제어문자(명시적 이스케이프 표기)
+const MAX_MERGES = 10;
+const esc = s => s.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+const initWords = () =>
+  Object.entries(CORPUS).map(([w,f]) => ({ word:w, freq:f, toks:[...w, EOW] }));
+
+// 인접 쌍 빈도 (단어 빈도 가중). Map은 삽입 순서 보존 → 동률이면 먼저 발견된 쌍 승리
+function pairCounts(words){
+  const m = new Map();
+  for(const {freq,toks} of words)
+    for(let i=0;i<toks.length-1;i++){
+      const k = toks[i]+SEP+toks[i+1];
+      m.set(k,(m.get(k)||0)+freq);
+    }
+  return m;
+}
+function bestPair(m){
+  let bk=null, bc=-1;
+  for(const [k,c] of m) if(c>bc){ bc=c; bk=k; }
+  return bk ? { a:bk.split(SEP)[0], b:bk.split(SEP)[1], count:bc } : null;
+}
+function mergeToks(toks,a,b){
+  const out=[]; let i=0;
+  while(i<toks.length){
+    if(i<toks.length-1 && toks[i]===a && toks[i+1]===b){ out.push(a+b); i+=2; }
+    else { out.push(toks[i]); i+=1; }
+  }
+  return out;
+}
+const applyMerge = (words,a,b) => words.map(w => ({ ...w, toks:mergeToks(w.toks,a,b) }));
+
+// 전체 학습을 미리 1회 실행 → Step02에서 쓸 규칙 목록 (실계산)
+const LEARNED = (() => {
+  let ws = initWords(); const rules=[];
+  for(let i=0;i<MAX_MERGES;i++){
+    const bp = bestPair(pairCounts(ws));
+    if(!bp || bp.count<2) break; // 빈도 1짜리 쌍은 병합 가치 없음
+    rules.push(bp);
+    ws = applyMerge(ws,bp.a,bp.b);
+  }
+  return rules;
+})();
+
+// ============================================================
+// STEP 1 — 인터랙티브 병합
+// ============================================================
+(function(){
+  let state = { words:initWords(), history:[] };
+
+  const tokChip = (t,isNew) =>
+    `<span class="tok ${t===EOW||t.endsWith(EOW)?'eow':''} ${isNew?'new':''}">${esc(t)}</span>`;
+
+  function vocabOf(words){
+    const s = new Set();
+    words.forEach(w => w.toks.forEach(t => s.add(t)));
+    return s;
+  }
+
+  function render(){
+    const { words, history } = state;
+    const last = history[history.length-1] || null;
+    const newTok = last ? last.a+last.b : null;
+
+    // ① 코퍼스
+    document.getElementById('stepBadge').textContent =
+      `(병합 ${history.length} / ${MAX_MERGES}회)`;
+    document.getElementById('corpusView').innerHTML = words.map(w =>
+      `<div class="wordrow"><span class="wname"><b>${w.word}</b> ×${w.freq}</span>` +
+      w.toks.map(t => tokChip(t, t===newTok)).join('') + `</div>`
+    ).join('');
+
+    // ② 쌍 빈도 — 상위 8개, 최빈 쌍 강조 + 기여 단어 분해
+    const counts = pairCounts(words);
+    const bp = bestPair(counts);
+    const sorted = [...counts.entries()].sort((x,y)=>y[1]-x[1]).slice(0,8);
+    if(!bp || history.length>=MAX_MERGES){
+      document.getElementById('pairView').innerHTML =
+        `<p class="note">병합 ${MAX_MERGES}회 완료! ↺ 리셋으로 처음부터 다시 볼 수 있어요.</p>`;
+    } else {
+      const maxC = sorted.length ? sorted[0][1] : 1;
+      const rows = sorted.map(([k,c])=>{
+        const [a,b]=k.split(SEP);
+        const win = a===bp.a && b===bp.b;
+        return VZ.barRow(`${esc(a)}+${esc(b)}`, c/maxC, { win, pctText:`${c}회` });
+      }).join('');
+      const contrib = words
+        .filter(w => mergeToks(w.toks,bp.a,bp.b).length < w.toks.length)
+        .map(w => `${w.word}(${w.freq})`).join(' + ');
+      document.getElementById('pairView').innerHTML = rows +
+        `<p class="note" style="margin-top:10px">최빈 쌍 <b>${esc(bp.a)}+${esc(bp.b)}</b> = ${contrib} = <b>${bp.count}회</b> → "▶ 다음 병합"을 누르면 이 쌍이 합쳐져요.</p>`;
+    }
+
+    // ③ 히스토리
+    document.getElementById('histView').innerHTML = history.length
+      ? history.map((h,i)=>
+          `<div class="histitem ${i===history.length-1?'latest':''}">${String(i+1).padStart(2,'0')}. ${esc(h.a)} + ${esc(h.b)} → <b>${esc(h.a+h.b)}</b> &nbsp;(${h.count}회)</div>`
+        ).join('')
+      : `<p class="note">아직 병합 규칙이 없어요. "▶ 다음 병합"을 눌러 보세요.</p>`;
+
+    // ④ 어휘 집합 (새로 생긴 심볼 강조)
+    const vocab = vocabOf(words);
+    const sortedVocab = [...vocab].sort((a,b)=> a.length-b.length || a.localeCompare(b));
+    document.getElementById('vocabView').innerHTML =
+      sortedVocab.map(t => tokChip(t, t===newTok)).join('');
+    document.getElementById('vocabNote').textContent =
+      `현재 심볼 ${vocab.size}개 — 병합할수록 글자가 합쳐져 긴 서브워드가 생기고, 더 이상 안 쓰이는 심볼은 표기에서 사라져요.`;
+
+    document.getElementById('btnMerge').disabled = !bp || history.length>=MAX_MERGES;
+    document.getElementById('btnAll').disabled = !bp || history.length>=MAX_MERGES;
+  }
+
+  function stepOnce(){
+    if(state.history.length>=MAX_MERGES) return;
+    const bp = bestPair(pairCounts(state.words));
+    if(!bp) return;
+    state = {
+      ...state,
+      words: applyMerge(state.words, bp.a, bp.b),
+      history: [...state.history, bp]
+    };
+  }
+
+  document.getElementById('btnMerge').addEventListener('click',()=>{ stepOnce(); render(); });
+  document.getElementById('btnAll').addEventListener('click',()=>{
+    while(state.history.length<MAX_MERGES) stepOnce();
+    render();
+  });
+  document.getElementById('btnReset').addEventListener('click',()=>{
+    state = { words:initWords(), history:[] };
+    render();
+  });
+  render();
+})();
+
+// ============================================================
+// STEP 2 — 학습된 규칙으로 새 단어 토큰화
+// ============================================================
+(function(){
+  const BASE_CHARS = new Set(Object.keys(CORPUS).join('').split(''));
+
+  const tokChip = (t,{hl=false,unk=false,fin=false}={}) =>
+    `<span class="tok ${t===EOW||t.endsWith(EOW)?'eow':''} ${hl?'new':''} ${unk?'unk':''} ${fin?'final':''}">${esc(t)}</span>`;
+
+  function tokenize(word){
+    const clean = word.toLowerCase().replace(/[^a-z]/g,'');
+    if(!clean) return null;
+    let toks = [...clean, EOW];
+    const steps = [{ label:'글자 분해 + '+EOW, toks, merged:null }];
+    LEARNED.forEach((r,i)=>{
+      const next = mergeToks(toks, r.a, r.b);
+      if(next.length < toks.length){
+        toks = next;
+        steps.push({ label:`규칙 ${String(i+1).padStart(2,'0')} · ${r.a}+${r.b}`, toks, merged:r.a+r.b });
+      }
+    });
+    return { clean, steps, final:toks };
+  }
+
+  function run(){
+    const word = document.getElementById('wordInput').value;
+    const res = tokenize(word);
+    if(!res){
+      document.getElementById('tokSteps').innerHTML = '<p class="note">영문 소문자 단어를 입력해 주세요.</p>';
+      document.getElementById('tokFinal').innerHTML = '';
+      document.getElementById('tokNote').textContent = '';
+      return;
+    }
+    const { clean, steps, final } = res;
+
+    document.getElementById('tokSteps').innerHTML = steps.map(s =>
+      `<div class="applyrow"><span class="rno">${esc(s.label)}</span>` +
+      s.toks.map(t => tokChip(t,{ hl: t===s.merged })).join('') + `</div>`
+    ).join('') + (steps.length===1
+      ? `<p class="note" style="margin-top:8px">적용되는 병합 규칙이 없어 글자 단위 그대로예요.</p>` : '');
+
+    const unkChars = [...clean].filter(c => !BASE_CHARS.has(c));
+    document.getElementById('tokFinal').innerHTML =
+      `<span class="mono" style="color:var(--muted)">${esc(clean)} →&nbsp;</span>` +
+      final.map(t => tokChip(t,{ fin:true, unk: t.length===1 && !BASE_CHARS.has(t) })).join('');
+
+    let note;
+    if(clean==='lowest'){
+      note = 'lowest는 코퍼스에 없던 OOV지만, <unk>가 되는 대신 low(낮다) + est</w>(최상급)라는 의미 단위로 쪼개졌어요. 이게 BPE의 힘!';
+    } else if(unkChars.length){
+      note = `글자 ${unkChars.join(', ')} 는 코퍼스에 한 번도 안 나온 진짜 미지 문자라 글자 그대로 남아요(실전 BPE는 바이트 수준에서 시작해 이마저도 처리해요).`;
+    } else {
+      note = `토큰 ${final.length}개로 분해됐어요. 코퍼스에서 자주 본 조각일수록 길게 뭉쳐요.`;
+    }
+    document.getElementById('tokNote').textContent = note;
+  }
+
+  document.getElementById('btnTok').addEventListener('click', run);
+  document.getElementById('wordInput').addEventListener('keydown', e => { if(e.key==='Enter') run(); });
+  run();
+})();
+</script>
+</body>
+</html>

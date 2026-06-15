@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10 텍스트 유사도 · TF-IDF/코사인 · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 3 · NLP BASICS</div>
+    <h1>텍스트 유사도 — 문서를 숫자 벡터로 바꿔 닮은 정도 재기</h1>
+    <p class="intro">컴퓨터는 글을 직접 이해하지 못해요. 그래서 문서를 <b>단어 등장 횟수</b>로 된 숫자 벡터로 바꾼 뒤, 두 벡터가 얼마나 비슷한 방향을 가리키는지로 닮음을 잽니다. <b>BoW → DTM → TF-IDF → 코사인 유사도</b>로 이어지는 흐름을 직접 계산하며 따라가 봅시다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · BoW / DTM</button>
+    <button data-s="1">01 · TF-IDF</button>
+    <button data-s="2">02 · 코사인 유사도</button>
+    <button data-s="3">03 · 추천</button>
+  </nav>
+
+  <!-- STEP 0 : BoW / DTM -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Bag of Words / DTM</span>
+    <h2>단어 가방(BoW): 순서를 버리고 횟수만 센다</h2>
+    <p class="lead">문장을 <b>단어 주머니</b>에 쏟아 넣고 흔들면 순서는 사라지고 <b>"어떤 단어가 몇 번"</b>만 남아요. 모든 문서의 고유 단어를 모은 <b>어휘집(vocabulary)</b>을 축으로 삼아, 각 문서를 횟수 벡터로 표현합니다.</p>
+    <div class="card" id="docCard" style="margin-bottom:18px"></div>
+    <div class="label">어휘집 (고유 단어 — 자동 추출)</div>
+    <div id="vocabView" style="margin-bottom:18px"></div>
+    <div class="label">문서-단어 행렬 (DTM) · 행 = 문서, 열 = 단어</div>
+    <div class="mx-op-row" id="dtmRow"></div>
+    <p class="note" style="margin-top:8px">→ 각 행이 그 문서의 <b>BoW 벡터</b>예요. 0은 그 단어가 없다는 뜻. 이렇게 글이 <b>숫자 벡터</b>가 되면 비로소 계산으로 비교할 수 있어요.</p>
+  </section>
+
+  <!-- STEP 1 : TF-IDF -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — TF-IDF</span>
+    <h2>흔한 단어는 깎고, 희귀한 단어는 키운다</h2>
+    <p class="lead">모든 문서에 다 나오는 단어는 <b>변별력이 없어요</b>. TF-IDF는 <b>문서 안 빈도(TF)</b>는 그대로 쓰되, <b>여러 문서에 흔할수록(IDF↓)</b> 가중치를 깎아서 "그 문서만의 특징 단어"를 도드라지게 만듭니다.</p>
+    <div class="callout q">
+      <div class="ttl">공식</div>
+      <div class="formula">TF-IDF(t, d) = TF(t, d) × IDF(t),&nbsp;&nbsp; IDF(t) = log( N / df(t) )</div>
+      <p style="margin-top:10px"><code>N</code> = 전체 문서 수, <code>df(t)</code> = 단어 t가 등장한 문서 수. 모든 문서에 나오면 <code>df=N</code> → <code>IDF=log(1)=0</code> → 가중치가 0이 돼요. (여기서 log는 <b>자연로그 ln</b> — 예: log(3/1)=1.099)</p>
+    </div>
+    <div class="label">단어별 df / IDF (실제 계산)</div>
+    <div style="overflow-x:auto"><table class="calc" id="idfTable"></table></div>
+    <div class="label" style="margin-top:20px">TF-IDF 행렬 = TF × IDF</div>
+    <div class="mx-op-row" id="tfidfRow"></div>
+    <p class="note" style="margin-top:8px">→ <b id="commonWord"></b> 처럼 모든 문서에 흔한 단어는 열 전체가 <b>0에 가깝게</b> 눌립니다. 반대로 한 문서에만 있는 단어가 그 문서의 <b>특징</b>으로 살아남아요.</p>
+  </section>
+
+  <!-- STEP 2 : 코사인 유사도 -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — Cosine Similarity</span>
+    <h2>두 벡터 사이 "각도"로 닮음을 잰다</h2>
+    <p class="lead">길이(문서 분량)는 무시하고 <b>방향</b>만 봐요. 두 벡터가 같은 쪽을 가리킬수록(각도↓) 유사도는 1에 가깝고, 직각(공통 단어 없음)이면 0이에요.</p>
+    <div class="callout v">
+      <div class="ttl">공식</div>
+      <div class="formula">cos(θ) = (A · B) / (|A| × |B|)</div>
+      <p class="note" style="margin:10px 0 0"><code>A·B</code>=내적(같은 차원끼리 곱해 합), <code>|A|</code>=벡터 A의 <b>길이(노름)</b>=√(각 성분²의 합). 길이로 나눠서 <b>문서가 길든 짧든</b> 방향(주제)만 비교해요.</p>
+    </div>
+    <div class="row" style="align-items:flex-start;gap:24px">
+      <div style="flex:1;min-width:280px">
+        <div class="label">분해 계산 (문서 <span id="cosA"></span> vs <span id="cosB"></span>)</div>
+        <div style="overflow-x:auto"><table class="calc" id="cosTable"></table></div>
+        <div id="cosResult" class="callout good" style="margin-top:14px"></div>
+      </div>
+      <div style="flex:0 0 auto">
+        <div class="label">2D로 단순화한 두 벡터</div>
+        <div class="chart-wrap" id="cosSvg"></div>
+        <p class="note" style="margin-top:6px;max-width:280px">실제 어휘는 여러 차원이지만, <b>공통 단어 축(가로)</b>과 <b>구별 단어 축(세로)</b> 둘만 골라 평면에 그렸어요. 두 화살표가 같은 쪽으로 모여 <b>사잇각이 작으면(예각) 닮은 문서</b>, 직각(90°)이면 안 닮은 거예요.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3 : 추천 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — Recommendation</span>
+    <h2>쿼리 문서와 가장 닮은 문서 찾기</h2>
+    <p class="lead">기준이 될 <b>쿼리 문서</b>를 하나 고르면, 나머지 문서와의 <b>TF-IDF 코사인 유사도</b>를 계산해 높은 순으로 정렬해요. 가장 닮은 문서가 🏆.</p>
+    <div class="row" id="queryBtns" style="margin-bottom:8px"></div>
+    <div class="label" id="rankLabel">유사도 순위</div>
+    <div id="rankView"></div>
+    <div class="callout good" style="margin-top:18px">
+      <div class="ttl">이게 콘텐츠 기반 추천의 기본기</div>
+      <p>"이 글을 본 사람에게 비슷한 글 추천"의 가장 단순한 형태예요. 문서를 TF-IDF 벡터로 만들고 코사인 유사도로 줄 세우면 끝. 영화·상품·뉴스 추천도 출발점은 똑같습니다.</p>
+    </div>
+  </section>
+
+  <p class="foot">// 모든 값은 브라우저에서 실제 계산 (TF · IDF · 내적 · 노름 · 코사인). 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '10 · Similarity');
+VZ.setupStepper();
+
+/* ============================================================
+   공통 데이터: 짧은 한국어 문서 3개 (하드코딩)
+   토큰은 공백 단위로 단순화.
+   ============================================================ */
+const DOCS = [
+  { name: '문서 1', tag: '고양이', tokens: ['반려동물', '고양이', '귀엽다', '산책', '산책'] },
+  { name: '문서 2', tag: '강아지', tokens: ['반려동물', '강아지', '귀엽다', '산책', '산책'] },
+  { name: '문서 3', tag: '주식', tokens: ['증시', '주식', '오르다', '주식', '투자', '오르다'] },
+];
+const N = DOCS.length;
+
+// 어휘집 (등장 순서대로 고유 단어 추출)
+const VOCAB = [];
+DOCS.forEach(d => d.tokens.forEach(t => { if (!VOCAB.includes(t)) VOCAB.push(t); }));
+
+// DTM (= TF, 원시 빈도): 행=문서, 열=어휘
+const DTM = DOCS.map(d => VOCAB.map(w => d.tokens.filter(t => t === w).length));
+
+// df, IDF
+const DF = VOCAB.map((_, c) => DTM.reduce((s, row) => s + (row[c] > 0 ? 1 : 0), 0));
+const IDF = DF.map(df => +Math.log(N / df).toFixed(4));
+
+// TF-IDF 행렬
+const TFIDF = DTM.map(row => row.map((tf, c) => +(tf * IDF[c]).toFixed(4)));
+
+// 노름
+const norm = v => Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+// 코사인 유사도
+function cosine(a, b) {
+  const d = VZ.dot(a, b);
+  const na = norm(a), nb = norm(b);
+  return (na === 0 || nb === 0) ? 0 : d / (na * nb);
+}
+
+const DOC_ACC = ['var(--q)', 'var(--k)', 'var(--v)'];
+const docLab = i => DOCS[i].name;
+
+// ---------- STEP 0 : BoW / DTM ----------
+(function () {
+  document.getElementById('docCard').innerHTML =
+    '<div class="label">샘플 문서 (공백 단위 토큰)</div>' +
+    DOCS.map((d, i) =>
+      `<div style="margin:6px 0;font-size:14px">
+        <b style="color:${DOC_ACC[i]}">${d.name}</b>
+        <span class="note" style="margin-left:8px">${d.tokens.map(t => `<span class="tagchip q" style="margin:0 2px">${t}</span>`).join('')}</span>
+      </div>`).join('');
+
+  document.getElementById('vocabView').innerHTML =
+    VZ.mxMatrix([VOCAB.map((_, i) => i)], {
+      acc: 'var(--slate)', shape: `[${VOCAB.length}]`,
+      colLabs: VOCAB, fmtCell: (v) => v
+    });
+
+  document.getElementById('dtmRow').innerHTML = VZ.mxMatrix(DTM, {
+    acc: 'var(--hot)', title: 'DTM (= 원시 빈도)',
+    rowLabs: DOCS.map((d, i) => `<span style="color:${DOC_ACC[i]}">${d.name}</span>`),
+    colLabs: VOCAB, shape: `[${N}×${VOCAB.length}]`, zeroDim: true
+  });
+})();
+
+// ---------- STEP 1 : TF-IDF ----------
+(function () {
+  const rows = VOCAB.map((w, c) =>
+    `<tr><td>${w}</td><td>${DF[c]}</td><td>log(${N}/${DF[c]})</td><td style="color:${IDF[c] === 0 ? 'var(--faint)' : 'var(--good)'}">${VZ.fmt(IDF[c], 3)}</td></tr>`).join('');
+  document.getElementById('idfTable').innerHTML =
+    `<thead><tr><th>단어</th><th>df</th><th>IDF 식</th><th>IDF</th></tr></thead><tbody>${rows}</tbody>`;
+
+  // 가장 흔한 단어(df 최대) 강조 안내
+  const maxDf = Math.max(...DF);
+  const commonWords = VOCAB.filter((_, c) => DF[c] === maxDf && maxDf === N);
+  document.getElementById('commonWord').textContent =
+    commonWords.length ? commonWords.map(w => `'${w}'`).join(', ') : '여러 문서에 흔한 단어';
+
+  // 흔한 단어 열 인덱스 강조
+  const hlCol = DF.indexOf(maxDf);
+  const tf = VZ.mxMatrix(DTM, {
+    acc: 'var(--hot)', title: 'TF (빈도)',
+    rowLabs: DOCS.map((d, i) => `<span style="color:${DOC_ACC[i]}">${d.name}</span>`),
+    colLabs: VOCAB, shape: `[${N}×${VOCAB.length}]`, zeroDim: true
+  });
+  const idfM = VZ.mxMatrix([IDF], {
+    acc: 'var(--q)', title: 'IDF (단어별)', colLabs: VOCAB,
+    shape: `[${VOCAB.length}]`, fmtCell: (v) => VZ.fmt(v, 2)
+  });
+  const res = VZ.mxMatrix(TFIDF, {
+    acc: 'var(--good)', title: 'TF-IDF = TF × IDF',
+    rowLabs: DOCS.map((d, i) => `<span style="color:${DOC_ACC[i]}">${d.name}</span>`),
+    colLabs: VOCAB, shape: `[${N}×${VOCAB.length}]`, hlCol,
+    fmtCell: (v) => VZ.fmt(v, 2), zeroDim: true
+  });
+  document.getElementById('tfidfRow').innerHTML =
+    VZ.opRow([tf, idfM, res], ['×(열별)', '=']);
+})();
+
+// ---------- STEP 2 : 코사인 유사도 ----------
+(function () {
+  // 닮은 두 문서(문서1 고양이 vs 문서2 강아지 — 둘 다 반려동물 주제)를 분해 예시로
+  const ai = 0, bi = 1;
+  const A = TFIDF[ai], B = TFIDF[bi];
+  document.getElementById('cosA').textContent = docLab(ai);
+  document.getElementById('cosB').textContent = docLab(bi);
+
+  // 분해 테이블
+  const prodRows = VOCAB.map((w, c) =>
+    `<tr><td>${w}</td><td>${VZ.fmt(A[c], 2)}</td><td>${VZ.fmt(B[c], 2)}</td><td>${VZ.fmt(A[c] * B[c], 3)}</td></tr>`).join('');
+  const dotAB = VZ.dot(A, B);
+  const nA = norm(A), nB = norm(B);
+  const cos = cosine(A, B);
+  document.getElementById('cosTable').innerHTML =
+    `<thead><tr><th>단어</th><th>A</th><th>B</th><th>A·B 항</th></tr></thead>
+     <tbody>${prodRows}</tbody>
+     <tfoot>
+       <tr class="win"><td>내적 A·B</td><td colspan="3" style="text-align:right">${VZ.fmt(dotAB, 3)}</td></tr>
+       <tr><td>|A|</td><td colspan="3" style="text-align:right">${VZ.fmt(nA, 3)}</td></tr>
+       <tr><td>|B|</td><td colspan="3" style="text-align:right">${VZ.fmt(nB, 3)}</td></tr>
+     </tfoot>`;
+
+  const deg = Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+  document.getElementById('cosResult').innerHTML =
+    `<div class="ttl">코사인 유사도</div>
+     <p>cos(θ) = ${VZ.fmt(dotAB, 3)} / (${VZ.fmt(nA, 3)} × ${VZ.fmt(nB, 3)}) = <b style="color:var(--good)">${VZ.fmt(cos, 3)}</b> &nbsp; (θ ≈ ${VZ.fmt(deg, 1)}°)</p>`;
+
+  // 2D 시각화: x축=두 문서 공통 단어(TF-IDF 합 최대), y축=쿼리 문서 고유 단어.
+  // 이렇게 하면 두 벡터가 같은 사분면에 놓여 "닮았지만 구별됨"(예각)이 보인다.
+  // 좌표는 분해 테이블과 같은 TF-IDF 값을 사용(원시빈도 아님 — 일관성).
+  const idxByVal = (arr) => arr.map((v, i) => [v, i]).sort((p, q) => q[0] - p[0]).map(p => p[1]);
+  const commonAxis = idxByVal(TFIDF[ai].map((v, c) => (TFIDF[ai][c] > 0 && TFIDF[bi][c] > 0) ? v + TFIDF[bi][c] : -1))
+    .find(c => TFIDF[ai][c] > 0 && TFIDF[bi][c] > 0);
+  const distinctAxis = idxByVal(TFIDF[ai]).find(c => TFIDF[ai][c] > 0 && TFIDF[bi][c] === 0);
+  const ax = commonAxis ?? 0;
+  const ay = distinctAxis ?? (ax === 0 ? 1 : 0);
+  const aXY = [TFIDF[ai][ax], TFIDF[ai][ay]];
+  const bXY = [TFIDF[bi][ax], TFIDF[bi][ay]];
+
+  const W = 280, H = 240, pad = 36;
+  const maxV = Math.max(1, ...aXY, ...bXY);
+  const sx = v => pad + (v / maxV) * (W - 2 * pad);
+  const sy = v => (H - pad) - (v / maxV) * (H - 2 * pad);
+  const ox = sx(0), oy = sy(0);
+  const arrow = (xy, col) => {
+    const x = sx(xy[0]), y = sy(xy[1]);
+    return `<line x1="${ox}" y1="${oy}" x2="${x}" y2="${y}" stroke="${col}" stroke-width="2.5" marker-end="url(#ah)"/>`;
+  };
+  document.getElementById('cosSvg').innerHTML =
+    `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      <defs><marker id="ah" markerWidth="9" markerHeight="9" refX="6" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 Z" fill="var(--muted)"/></marker></defs>
+      <line class="axis" x1="${pad}" y1="${oy}" x2="${W - 8}" y2="${oy}"/>
+      <line class="axis" x1="${ox}" y1="${H - 8}" x2="${ox}" y2="${8}"/>
+      <text class="axislabel" x="${W - 8}" y="${oy + 14}" text-anchor="end">'${VOCAB[ax]}'</text>
+      <text class="axislabel" x="${ox + 6}" y="${14}">'${VOCAB[ay]}'</text>
+      ${arrow(aXY, DOC_ACC[ai])}
+      ${arrow(bXY, DOC_ACC[bi])}
+      <text x="${sx(aXY[0])}" y="${sy(aXY[1]) - 6}" fill="${DOC_ACC[ai]}" font-size="11" font-family="JetBrains Mono">A</text>
+      <text x="${sx(bXY[0]) + 6}" y="${sy(bXY[1])}" fill="${DOC_ACC[bi]}" font-size="11" font-family="JetBrains Mono">B</text>
+    </svg>`;
+})();
+
+// ---------- STEP 3 : 추천 ----------
+(function () {
+  const btns = document.getElementById('queryBtns');
+  btns.innerHTML = DOCS.map((d, i) =>
+    `<button class="btn" data-q="${i}" style="${i === 0 ? 'background:var(--q);color:#04121f' : ''}">${d.name} · ${d.tag}</button>`).join('');
+
+  function recommend(qi) {
+    document.getElementById('rankLabel').textContent =
+      `${DOCS[qi].name} 와(과) 닮은 문서 순위`;
+    const sims = DOCS
+      .map((d, i) => ({ i, sim: cosine(TFIDF[qi], TFIDF[i]) }))
+      .filter(o => o.i !== qi)
+      .sort((a, b) => b.sim - a.sim);
+    const maxSim = Math.max(...sims.map(o => o.sim), 0.0001);
+    document.getElementById('rankView').innerHTML = sims.map((o, rank) =>
+      VZ.barRow(
+        `${DOCS[o.i].name} · ${DOCS[o.i].tag}`,
+        o.sim / maxSim,
+        { win: rank === 0 && o.sim > 0, color: DOC_ACC[o.i], pctText: VZ.fmt(o.sim, 3) }
+      )).join('');
+  }
+
+  btns.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    btns.querySelectorAll('button').forEach(x => x.style.cssText = '');
+    b.style.cssText = 'background:var(--q);color:#04121f';
+    recommend(+b.dataset.q);
+  });
+  recommend(0);
+})();
+</script>
+</body>
+</html>

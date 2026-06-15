@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12 텍스트 분류 · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  /* ---- Step00 파이프라인 ---- */
+  .pipe{display:flex; align-items:stretch; gap:8px; overflow-x:auto; padding:10px 2px 14px;}
+  .pstage{background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:13px 14px;
+    min-width:108px; text-align:center; flex:none; display:flex; flex-direction:column; justify-content:space-between; gap:8px;}
+  .pstage .pname{font-size:13px; font-weight:700; color:var(--ink);}
+  .pstage .pfrom{font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint);}
+  .pstage .pdata{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); line-height:1.5;}
+  .pstage .pshape{font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:var(--q);}
+  .pstage.hotline{border-color:rgba(251,191,36,.45); background:rgba(251,191,36,.06);}
+  .parrow{align-self:center; color:var(--faint); font-size:20px; font-weight:700; flex:none;}
+
+  /* ---- Step01 토큰 카드 ---- */
+  .tokstrip{display:flex; gap:10px; flex-wrap:wrap; margin:6px 0 14px;}
+  .tokcard{border:1px solid var(--line); border-radius:12px; padding:10px 12px; text-align:center;
+    background:var(--panel-2); min-width:92px; transition:.2s;}
+  .tokcard .tword{font-size:15px; font-weight:800; color:var(--faint);}
+  .tokcard .temb{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--faint); margin-top:5px;}
+  .tokcard.done{border-color:rgba(192,132,252,.4);}
+  .tokcard.done .tword{color:var(--v);} .tokcard.done .temb{color:var(--muted);}
+  .tokcard.cur{border-color:var(--hot); background:rgba(251,191,36,.08); box-shadow:0 4px 16px rgba(251,191,36,.12);}
+  .tokcard.cur .tword{color:var(--hot);} .tokcard.cur .temb{color:var(--ink);}
+  .hchips{display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-top:8px;}
+
+  /* ---- Step03 임베딩 행렬 + 윈도우 ---- */
+  .emx{display:inline-flex; flex-direction:column; gap:7px; align-items:center;}
+  .emx-row{display:flex; gap:5px; align-items:center;}
+  .emx-lab{width:52px; text-align:right; font-size:13px; font-weight:700; color:var(--ink); padding-right:4px;}
+  .emx-cell{width:54px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:5px;
+    font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--ink); transition:.15s;}
+  .emx-row.win .emx-cell{background:rgba(251,191,36,.16); border-color:var(--hot); color:var(--hot);}
+  .emx-row.win .emx-lab{color:var(--hot);}
+  .featlist{display:flex; flex-direction:column; gap:5px;}
+  .featcell{width:120px; height:34px; display:flex; align-items:center; justify-content:center; gap:6px; border-radius:5px;
+    font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700;
+    background:var(--panel-2); border:1px dashed var(--line); color:var(--faint);}
+  .featcell.fill{border-style:solid; color:var(--ink);}
+  .featcell.cur{border-color:var(--hot); color:var(--hot); background:rgba(251,191,36,.12);}
+  .featcell.max{border-color:var(--good); color:var(--good); background:rgba(52,211,153,.12);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 4 · NLP TASKS</div>
+    <h1>텍스트 분류 — 문장을 읽고 감정을 맞히다</h1>
+    <p class="intro">영화 리뷰가 <b>긍정인지 부정인지</b> 기계가 어떻게 알까요? 문장을 숫자로 바꾸고(전처리), <b>RNN</b>이 단어를 순서대로 읽어 기억 h 에 요약한 뒤, 마지막 h 하나로 <b>확률</b>을 뽑습니다. 같은 일을 <b>1D CNN</b>으로 푸는 관점까지, 작은 숫자로 끝까지 굴려 봐요. (임베딩·가중치는 <b>학습이 끝났다고 가정한 예시값</b>이고, 계산은 전부 브라우저에서 진짜로 합니다.)</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 파이프라인</button>
+    <button data-s="1">01 · RNN이 읽는 과정</button>
+    <button data-s="2">02 · hidden → 분류</button>
+    <button data-s="3">03 · 1D CNN 관점</button>
+  </nav>
+
+  <!-- STEP 0 : 파이프라인 전체 그림 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Pipeline</span>
+    <h2>문장 한 줄이 확률 하나가 되기까지</h2>
+    <p class="lead">리뷰 <b>"이 영화 정말 재미 있다"</b> 가 분류기를 통과하는 전 과정이에요. 각 단계에서 데이터의 <b>모양(shape)</b>이 어떻게 바뀌는지 따라가 보세요.</p>
+    <div class="pipe" id="pipeFlow"></div>
+    <div class="callout q">
+      <div class="ttl">앞 챕터들과의 연결</div>
+      <p><b>토큰화·정수 인코딩</b>은 9장(전처리)에서 배운 그대로예요. <b>임베딩</b>은 12장(Word2Vec)처럼 단어를 의미 벡터로 바꾼 결과이고, 가운데 <b>RNN 셀</b>은 7장의 h<sub>t</sub> = tanh(W<sub>x</sub>x<sub>t</sub> + W<sub>h</sub>h<sub>t-1</sub> + b) 그 셀입니다. 마지막 스텝에선 8장의 <b>합성곱</b>을 문장에 적용해 봐요.</p>
+      <p>새로 등장하는 건 끝의 <b>FC + 시그모이드</b> 한 줄뿐 — 시퀀스 요약 벡터를 <b>확률 1개</b>로 바꾸는 부분이에요.</p>
+    </div>
+    <p class="note">→ 핵심 관찰: 길이 5짜리 문장이 <code class="mono">[5] → [5×3] → [2] → [1]</code> 로 점점 <b>압축</b>돼요. RNN의 마지막 h 가 "문장 전체 요약"이라는 게 이 구조의 전부입니다.</p>
+  </section>
+
+  <!-- STEP 1 : RNN이 문장을 읽는 과정 -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Reading Word by Word</span>
+    <h2>RNN이 한 단어씩 읽으며 기억을 갱신한다</h2>
+    <p class="lead">리뷰 <b>"이 영화 정말 재미 있다"</b> (5토큰)를 넣어 봅시다. 각 단어는 3차원 임베딩이고, 은닉 상태 h 는 2차원·시작값 <b>[0, 0]</b>. <b>▶ 다음 단어</b>를 누를 때마다 7장과 똑같은 tanh 갱신식이 한 번 돕니다.</p>
+
+    <div class="callout v" style="margin-bottom:18px">
+      <div class="ttl">하드코딩된 임베딩 · 가중치 (학습 완료를 가정)</div>
+      <p style="font-size:13px">보기 쉽도록 <b>h<sub>0</sub> = 감성 축</b>, h<sub>1</sub> = 그 외 정보가 되게 값을 골라뒀어요. 실제로는 이 모든 숫자를 역전파가 학습합니다.</p>
+      <p class="mono" style="color:var(--ink);font-size:12.5px;margin:0">
+        W<sub>x</sub> = [[1.2, 0.0, 0.2],[0.0, 0.8, -0.3]] &nbsp;·&nbsp; W<sub>h</sub> = [[0.6, 0.1],[0.0, 0.5]] &nbsp;·&nbsp; b = [0, 0]
+      </p>
+    </div>
+
+    <div class="row" style="gap:8px;margin-bottom:8px">
+      <button class="btn" id="wStep">▶ 다음 단어</button>
+      <button class="btn" id="wReset" style="border-color:var(--faint);background:rgba(255,255,255,.04);color:var(--muted)">⟲ 처음으로</button>
+      <span class="val" id="wVal" style="min-width:0">읽은 단어 0 / 5</span>
+    </div>
+
+    <div class="label">문장 (각 카드 아래는 그 단어의 임베딩 벡터)</div>
+    <div class="tokstrip" id="tokStrip"></div>
+
+    <div class="label">은닉 상태의 여정 — h<sub>0</sub> 부터 지금까지</div>
+    <div class="hchips" id="hChips"></div>
+
+    <div class="sub" style="margin-top:20px">이번 단어 계산 자세히</div>
+    <div id="wordCalc" class="callout q"></div>
+
+    <p class="note" style="margin-top:14px">→ <b>"재미"</b>를 읽는 순간 감성 축 h<sub>0</sub> 가 훌쩍 뛰는 걸 보세요. 마지막 h 에는 "긍정 단어를 봤다"는 기억이 담겨, 다음 스텝의 분류 재료가 됩니다.</p>
+  </section>
+
+  <!-- STEP 2 : 마지막 hidden → 분류 -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — Last Hidden → Probability</span>
+    <h2>마지막 h 하나로 긍/부정 확률 만들기</h2>
+    <p class="lead">분류기는 마지막 은닉 상태에 <b>FC 한 층</b>을 곱하고 <b>시그모이드</b>로 0~1 확률을 만들어요. 문장을 바꿔 확률이 어떻게 뒤집히는지 비교해 보세요.</p>
+
+    <div class="formula" style="margin-bottom:16px">z = w·h<sub>마지막</sub> + b &nbsp;&nbsp;→&nbsp;&nbsp; P(긍정) = σ(z) = 1 / (1 + e<sup>-z</sup>)</div>
+
+    <div class="view-toggle" id="sentBtns">
+      <button data-k="pos" class="on">😊 긍정 리뷰</button>
+      <button data-k="neg">😞 부정 리뷰</button>
+    </div>
+
+    <div id="clsView"></div>
+
+    <div class="sub" style="margin-top:22px">두 문장 최종 비교 (같은 가중치, 다른 입력)</div>
+    <table class="calc" id="cmpTable"></table>
+
+    <div class="callout good" style="margin-top:18px">
+      <div class="ttl">검산 포인트</div>
+      <p>FC 가중치 <span class="mono">w = [2.6, -0.8], b = 0.2</span> 도 "학습됐다 가정"한 값이지만, 감성 축 h<sub>0</sub> 에 큰 양수를 곱하도록 튜닝해 둔 덕에 <b>긍정 리뷰 → P(긍정) &gt; 60%</b>, <b>부정 리뷰 → P(긍정) &lt; 50%</b> 가 실제 계산으로 나와요. 위 표의 모든 숫자는 지금 이 브라우저가 계산한 값입니다.</p>
+    </div>
+  </section>
+
+  <!-- STEP 3 : 1D CNN 관점 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — 1D CNN over Text</span>
+    <h2>커널이 바이그램(연속 2단어)을 훑는다</h2>
+    <p class="lead">같은 임베딩 행렬 <b>[5×3]</b> 위로 <b>크기 2짜리 커널 [2×3]</b> 을 세로로 미끄러뜨리면, 8장의 합성곱과 똑같이 <b>겹친 6쌍을 곱해 더한 숫자 하나</b>가 나와요. 윈도우가 연속한 두 단어를 덮으니, 커널은 곧 <b>n-gram 패턴 검출기</b>입니다.</p>
+
+    <div class="view-toggle" id="kernBtns"></div>
+
+    <div class="row" style="gap:30px;align-items:flex-start">
+      <div>
+        <div class="label">임베딩 행렬 [5×3] · <span style="color:var(--hot)">노란 창</span> = 현재 윈도우</div>
+        <div class="emx" id="cnnEmb"></div>
+      </div>
+      <div>
+        <div class="label">커널 [2×3]</div>
+        <div id="cnnKernel"></div>
+      </div>
+      <div>
+        <div class="label">feature [4] — 윈도우당 1칸</div>
+        <div class="featlist" id="cnnFeats"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:20px">
+      <button class="btn" id="cnnPrev">◀ 이전</button>
+      <button class="btn" id="cnnNext">다음 ▶</button>
+      <button class="btn" id="cnnReset">↺ 처음으로</button>
+    </div>
+
+    <div class="callout q" style="margin-top:20px">
+      <div class="ttl" id="cnnPos"></div>
+      <div id="cnnCalc" class="mono" style="font-size:13px;line-height:2;color:var(--muted)"></div>
+    </div>
+
+    <div class="sub">max-over-time pooling — 가장 강한 신호 하나만</div>
+    <div id="cnnPool"></div>
+
+    <p class="note" style="margin-top:14px">→ 문장 어디에 있든 <b>"정말+재미" 같은 강한 바이그램</b>이 한 번이라도 등장하면 max 값이 커져요. 위치는 버리고 "패턴이 있었나"만 남기는 것 — 이게 텍스트 CNN(max-over-time pooling)의 직관이고, 8장에서 본 맥스 풀링의 1차원 버전입니다. 검출기를 <b>부정 바이그램</b>으로 바꿔 보세요. 긍정 문장에선 조용하죠. 실제 모델은 이런 커널 수백 개의 max 값들을 모아 FC 로 분류해요.</p>
+  </section>
+
+  <p class="foot">// 모든 값은 브라우저에서 실제 계산. 임베딩·가중치는 "학습 완료"를 가정한 예시값. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '12 · Text Classify');
+VZ.setupStepper();
+
+const tanh = x => Math.tanh(x);
+const sigmoid = x => 1 / (1 + Math.exp(-x));
+
+// ====== 공통 데이터 — "학습됐다 가정"한 하드코딩 값 ======
+// 임베딩 3차원: [감성(±), 명사성, 강조성] 정도의 느낌으로 설계
+const EMB = {
+  '이':   [ 0.1,  0.2,  0.0],
+  '영화': [ 0.0,  0.5,  0.3],
+  '정말': [ 0.3,  0.1,  0.4],
+  '재미': [ 0.9,  0.3, -0.2],
+  '있다': [ 0.6, -0.1,  0.2],
+  '진짜': [ 0.3,  0.1,  0.4],
+  '지루': [-0.9,  0.4, -0.1],
+  '하다': [-0.5,  0.0,  0.1],
+};
+const VOCAB = { '<pad>':0, '<unk>':1, '이':2, '영화':3, '정말':4, '재미':5, '있다':6, '진짜':7, '지루':8, '하다':9 };
+const SENTS = {
+  pos: { label:'긍정 리뷰', emoji:'😊', tokens:['이','영화','정말','재미','있다'] },
+  neg: { label:'부정 리뷰', emoji:'😞', tokens:['이','영화','진짜','지루','하다'] },
+};
+
+// RNN 가중치 (hidden 2차원) — h0 가 감성 축이 되도록 설계
+const Wx = [[1.2, 0.0, 0.2], [0.0, 0.8, -0.3]];
+const Wh = [[0.6, 0.1], [0.0, 0.5]];
+const Brnn = [0.0, 0.0];
+// FC: P(긍정) = sigmoid(w·h + b)
+const FCW = [2.6, -0.8], FCB = 0.2;
+
+// h_t = tanh(Wx·x_t + Wh·h_{t-1} + b). states[t] = h_t, pres[t-1] = tanh 직전 값
+function rnnRun(tokens){
+  const states = [[0, 0]], pres = [];
+  for (const tk of tokens){
+    const x = EMB[tk], h = states[states.length - 1];
+    const pre = [
+      Wx[0][0]*x[0] + Wx[0][1]*x[1] + Wx[0][2]*x[2] + Wh[0][0]*h[0] + Wh[0][1]*h[1] + Brnn[0],
+      Wx[1][0]*x[0] + Wx[1][1]*x[1] + Wx[1][2]*x[2] + Wh[1][0]*h[0] + Wh[1][1]*h[1] + Brnn[1],
+    ];
+    pres.push(pre);
+    states.push([tanh(pre[0]), tanh(pre[1])]);
+  }
+  const last = states[states.length - 1];
+  const z = FCW[0]*last[0] + FCW[1]*last[1] + FCB;
+  return { states, pres, z, p: sigmoid(z) };
+}
+const RUNS = { pos: rnnRun(SENTS.pos.tokens), neg: rnnRun(SENTS.neg.tokens) };
+
+const embStr = tk => '[' + EMB[tk].map(v => VZ.fmt(v, 1)).join(', ') + ']';
+const hStr = h => '[' + h.map(v => VZ.fmt(v)).join(', ') + ']';
+
+// ---------- STEP 0 : 파이프라인 ----------
+(function(){
+  const toks = SENTS.pos.tokens;
+  const ids = toks.map(t => VOCAB[t]);
+  const p = RUNS.pos.p;
+  const stage = (name, data, shape, from, hot) =>
+    `<div class="pstage ${hot ? 'hotline' : ''}">
+      <div>${from ? `<div class="pfrom">${from}</div>` : ''}<div class="pname">${name}</div></div>
+      <div class="pdata">${data}</div>
+      <div class="pshape">${shape}</div>
+    </div>`;
+  const arrow = '<div class="parrow">→</div>';
+  document.getElementById('pipeFlow').innerHTML = [
+    stage('원문', '"이 영화 정말<br>재미 있다"', 'str', ''),
+    stage('토큰화', toks.join(' | '), '5개 토큰', 'ch08 전처리'),
+    stage('정수 인코딩', '[' + ids.join(', ') + ']', '[5]', 'ch08 전처리'),
+    stage('임베딩 룩업', '단어마다<br>3차원 벡터', '[5×3]', 'ch11 Word2Vec'),
+    stage('RNN', 'h 를 5번 갱신<br>마지막 h만 사용', '[2]', 'ch06 RNN', true),
+    stage('FC + σ', 'w·h + b<br>→ 시그모이드', '[1]', 'NEW', true),
+    stage('판정', `P(긍정) = ${(p*100).toFixed(1)}%<br><b style="color:var(--good)">긍정!</b>`, '확률', ''),
+  ].join(arrow);
+})();
+
+// ---------- STEP 1 : RNN이 한 단어씩 읽기 ----------
+(function(){
+  const toks = SENTS.pos.tokens;
+  const run = RUNS.pos;
+  let t = 0; // 읽은 단어 수 (0..5)
+
+  function hChip(h, active){
+    const cls = active ? 'good' : 'neutral';
+    return `<div class="vec ${cls}"><div class="n">${VZ.fmt(h[0])}</div><div class="n">${VZ.fmt(h[1])}</div></div>`;
+  }
+
+  function draw(){
+    document.getElementById('wVal').textContent = `읽은 단어 ${t} / ${toks.length}`;
+    document.getElementById('tokStrip').innerHTML = toks.map((tk, i) => {
+      const cls = (i === t - 1) ? 'cur' : (i < t ? 'done' : '');
+      return `<div class="tokcard ${cls}"><div class="tword">${tk}</div><div class="temb">${embStr(tk)}</div></div>`;
+    }).join('');
+    document.getElementById('hChips').innerHTML = run.states.slice(0, t + 1).map((h, i) =>
+      `<div style="text-align:center"><div class="label" style="margin-bottom:4px;color:${i === t ? 'var(--good)' : 'var(--muted)'}">h<sub>${i}</sub>${i === t ? ' (현재)' : ''}</div>${hChip(h, i === t)}</div>`
+    ).join('');
+
+    const box = document.getElementById('wordCalc');
+    if (t === 0){
+      box.innerHTML = `<div class="ttl">초기 상태</div>
+        <p>아직 아무 단어도 안 읽었어요. <b style="color:var(--good)">h<sub>0</sub> = [0.00, 0.00]</b> — 백지 상태의 기억입니다. <b>▶ 다음 단어</b>를 눌러 보세요.</p>`;
+      return;
+    }
+    const tk = toks[t-1], x = EMB[tk], prev = run.states[t-1], cur = run.states[t], pre = run.pres[t-1];
+    const dh0 = cur[0] - prev[0];
+    const mood = dh0 > 0.25 ? `이 시점에서 감성 축 h<sub>0</sub> 가 <b style="color:var(--good)">+${VZ.fmt(dh0)}</b> 만큼 훌쩍 올랐어요.`
+      : dh0 < -0.25 ? `이 시점에서 감성 축 h<sub>0</sub> 가 <b style="color:var(--k)">${VZ.fmt(dh0)}</b> 만큼 뚝 떨어졌어요.`
+      : `감성 축 h<sub>0</sub> 는 ${VZ.fmt(dh0)} 만큼만 움직였어요 — 단어가 중립이어서일 수도, 이미 h 가 tanh 포화 근처라 변화 여지가 작아서일 수도 있어요.`;
+    box.innerHTML = `<div class="ttl">단어 ${t} — "${tk}" 읽기</div>
+      <p style="font-size:13.5px">입력 <b style="color:var(--q)">x = ${embStr(tk)}</b>, 직전 기억 <b style="color:var(--hot)">h<sub>${t-1}</sub> = ${hStr(prev)}</b></p>
+      <p class="mono" style="font-size:12.5px;color:var(--ink);line-height:1.9">
+        pre&#8320; = 1.2·${VZ.fmt(x[0],1)} + 0.0·${VZ.fmt(x[1],1)} + 0.2·${VZ.fmt(x[2],1)} + 0.6·${VZ.fmt(prev[0])} + 0.1·${VZ.fmt(prev[1])} = <b style="color:var(--hot)">${VZ.fmt(pre[0])}</b><br>
+        pre&#8321; = 0.0·${VZ.fmt(x[0],1)} + 0.8·${VZ.fmt(x[1],1)} + (-0.3)·${VZ.fmt(x[2],1)} + 0.0·${VZ.fmt(prev[0])} + 0.5·${VZ.fmt(prev[1])} = <b style="color:var(--hot)">${VZ.fmt(pre[1])}</b><br>
+        h<sub>${t}</sub> = tanh([${VZ.fmt(pre[0])}, ${VZ.fmt(pre[1])}]) = <b style="color:var(--good)">${hStr(cur)}</b>
+      </p>
+      <p style="font-size:13px;margin-top:6px">${mood}</p>`;
+  }
+
+  document.getElementById('wStep').addEventListener('click', () => { t = Math.min(toks.length, t + 1); draw(); });
+  document.getElementById('wReset').addEventListener('click', () => { t = 0; draw(); });
+  draw();
+})();
+
+// ---------- STEP 2 : 마지막 hidden → 분류 ----------
+(function(){
+  const btns = document.getElementById('sentBtns');
+
+  function render(key){
+    const s = SENTS[key], run = RUNS[key];
+    const h = run.states[run.states.length - 1];
+    const p = run.p;
+    const verdict = p >= 0.5
+      ? '<b style="color:var(--good)">긍정</b>'
+      : '<b style="color:var(--k)">부정</b>';
+    document.getElementById('clsView').innerHTML = `
+      <p class="sub" style="margin-top:14px">${s.emoji} "${s.tokens.join(' ')}"</p>
+      <div class="row" style="gap:14px;margin-bottom:14px">
+        <div style="text-align:center"><div class="label" style="margin-bottom:4px">마지막 h<sub>5</sub></div>
+          <div class="vec good"><div class="n">${VZ.fmt(h[0])}</div><div class="n">${VZ.fmt(h[1])}</div></div></div>
+        <div class="op">→</div>
+        <div class="callout q" style="margin:0;flex:1;min-width:260px">
+          <p class="mono" style="font-size:12.5px;color:var(--ink);line-height:1.9;margin:0">
+            z = 2.6·${VZ.fmt(h[0])} + (-0.8)·${VZ.fmt(h[1])} + 0.2 = <b style="color:var(--hot)">${VZ.fmt(run.z)}</b><br>
+            P(긍정) = σ(${VZ.fmt(run.z)}) = 1/(1+e<sup>${VZ.fmt(-run.z)}</sup>) = <b style="color:var(--good)">${VZ.fmt(p)}</b>
+          </p>
+        </div>
+      </div>
+      ${VZ.barRow('긍정', p, { win: p >= 0.5 })}
+      ${VZ.barRow('부정', 1 - p, { win: p < 0.5, color: 'var(--k)' })}
+      <p class="note" style="margin-top:10px">→ 판정: ${verdict} (P(긍정) ${p >= 0.5 ? '≥' : '&lt;'} 0.5)</p>`;
+  }
+
+  // 비교 표 (두 문장 모두 실계산)
+  (function(){
+    const rows = Object.keys(SENTS).map(k => {
+      const s = SENTS[k], run = RUNS[k];
+      const ok = (k === 'pos') === (run.p >= 0.5);
+      return `<tr class="${run.p >= 0.5 ? 'win' : ''}">
+        <td>${s.emoji} ${s.tokens.join(' ')}</td>
+        <td>${hStr(run.states[5])}</td>
+        <td>${VZ.fmt(run.z)}</td>
+        <td>${(run.p * 100).toFixed(1)}%</td>
+        <td>${run.p >= 0.5 ? '긍정' : '부정'} ${ok ? '✓' : '✗'}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('cmpTable').innerHTML =
+      `<tr><th>문장</th><th>마지막 h</th><th>z</th><th>P(긍정)</th><th>판정</th></tr>` + rows;
+  })();
+
+  btns.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    btns.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    render(b.dataset.k);
+  });
+  render('pos');
+})();
+
+// ---------- STEP 3 : 1D CNN — 바이그램 검출기 ----------
+(function(){
+  const toks = SENTS.pos.tokens;             // "이 영화 정말 재미 있다"
+  const M = toks.map(tk => EMB[tk]);         // [5×3]
+  const KERNELS = {
+    kpos: {
+      name: '😊 긍정 바이그램 검출기',
+      K: [[0.3, 0.0, 0.1], [1.0, 0.0, 0.2]],
+      desc: '두 단어의 감성 축(1열)에 양수 가중치 — "긍정 단어로 이어지는 두 단어"에 크게 반응해요.',
+    },
+    kneg: {
+      name: '😞 부정 바이그램 검출기',
+      K: [[-0.2, 0.3, 0.0], [-1.0, 0.2, 0.0]],
+      desc: '감성 축에 음수 가중치 — 부정적인 바이그램에서 켜지도록 학습된 필터예요. 이 긍정 문장에선 조용한 것(최대 0.14)이 정상이죠.',
+    },
+  };
+  const NW = toks.length - 1; // 윈도우 4개
+  function convAll(K){
+    const out = [];
+    for (let i = 0; i < NW; i++){
+      let s = 0;
+      for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) s += M[i + r][c] * K[r][c];
+      out.push(s);
+    }
+    return out;
+  }
+
+  let kKey = 'kpos';
+  let step = 0;       // 현재 윈도우 0..NW-1
+  let filled = 0;     // 채워진 feature 칸 수 (step+1 까지)
+
+  const btns = document.getElementById('kernBtns');
+  btns.innerHTML = Object.keys(KERNELS).map((k, i) =>
+    `<button data-k="${k}" class="${i === 0 ? 'on' : ''}">${KERNELS[k].name}</button>`).join('');
+
+  function draw(){
+    const { K, desc } = KERNELS[kKey];
+    const feats = convAll(K);
+
+    // 임베딩 행렬 + 슬라이딩 윈도우 (행 step, step+1 강조)
+    document.getElementById('cnnEmb').innerHTML = M.map((row, r) =>
+      `<div class="emx-row ${ (r === step || r === step + 1) ? 'win' : ''}">
+        <div class="emx-lab">${toks[r]}</div>
+        ${row.map(v => `<div class="emx-cell">${VZ.fmt(v, 1)}</div>`).join('')}
+      </div>`).join('');
+
+    // 커널
+    document.getElementById('cnnKernel').innerHTML = VZ.mxMatrix(K, {
+      acc: 'var(--hot)', shape: '[2×3]',
+      rowLabs: ['단어 i', '단어 i+1'],
+      fmtCell: v => `<span style="color:${v > 0 ? 'var(--good)' : (v < 0 ? 'var(--k)' : 'var(--faint)')}">${VZ.fmt(v, 1)}</span>`,
+    });
+
+    // feature 리스트
+    const allDone = (filled >= NW);
+    const maxV = Math.max(...feats);
+    const maxI = feats.indexOf(maxV);
+    document.getElementById('cnnFeats').innerHTML = feats.map((v, i) => {
+      const isFill = i < filled;
+      const cls = ['featcell', isFill ? 'fill' : '', (i === step && !allDone) ? 'cur' : '',
+        (allDone && i === maxI) ? 'max' : ''].filter(Boolean).join(' ');
+      return `<div class="${cls}"><small style="font-weight:400;color:var(--faint)">${toks[i]}·${toks[i+1]}</small> ${isFill ? VZ.fmt(v) : '·'}</div>`;
+    }).join('');
+
+    // 현재 윈도우 계산 분해
+    const i = step;
+    const terms0 = M[i].map((v, c) => `${VZ.fmt(v,1)}×${VZ.fmt(K[0][c],1)}`).join(' + ');
+    const terms1 = M[i+1].map((v, c) => `${VZ.fmt(v,1)}×${VZ.fmt(K[1][c],1)}`).join(' + ');
+    document.getElementById('cnnPos').innerHTML =
+      `윈도우 ${i}: <b style="color:var(--hot)">"${toks[i]} + ${toks[i+1]}"</b> → feature[${i}]`;
+    document.getElementById('cnnCalc').innerHTML =
+      `(${toks[i]}행)&nbsp; ${terms0}<br>(${toks[i+1]}행) ${terms1}<br>합계 = <b style="color:var(--good)">${VZ.fmt(feats[i])}</b>
+      <div style="font-family:'Pretendard';color:var(--muted);font-size:13px;margin-top:8px">${desc}</div>`;
+
+    // max pooling
+    const pool = document.getElementById('cnnPool');
+    if (allDone){
+      const fracBase = Math.max(...feats.map(v => Math.abs(v)), 0.01);
+      pool.innerHTML = feats.map((v, i2) =>
+        VZ.barRow(`${toks[i2]}·${toks[i2+1]}`, Math.max(0, v) / fracBase,
+          { win: i2 === maxI, pctText: VZ.fmt(v) })).join('') +
+        `<p class="note" style="margin-top:10px">→ max( ${feats.map(v => VZ.fmt(v)).join(', ')} ) =
+          <b style="color:var(--good)">${VZ.fmt(maxV)}</b> — 가장 강한 바이그램은
+          <b style="color:var(--hot)">"${toks[maxI]} + ${toks[maxI+1]}"</b>. 이 한 숫자가 이 검출기의 최종 출력이에요.</p>`;
+    } else {
+      pool.innerHTML = `<p class="note">"다음 ▶" 으로 윈도우 4개를 모두 훑으면 max 풀링 결과가 나타나요. (${filled}/${NW} 완료)</p>`;
+    }
+  }
+
+  document.getElementById('cnnNext').onclick = () => {
+    if (filled <= step) filled = step + 1;
+    else if (step < NW - 1){ step += 1; filled = Math.max(filled, step + 1); }
+    draw();
+  };
+  document.getElementById('cnnPrev').onclick = () => { step = Math.max(0, step - 1); draw(); };
+  document.getElementById('cnnReset').onclick = () => { step = 0; filled = 0; draw(); };
+  btns.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    btns.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    kKey = b.dataset.k; step = 0; filled = 0; draw();
+  });
+  draw();
+})();
+</script>
+</body>
+</html>

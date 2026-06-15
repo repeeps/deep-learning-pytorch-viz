@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>01 텐서 다루기 · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 1 · FOUNDATION</div>
+    <h1>텐서 조작 — 모양을 바꿔도 데이터는 그대로</h1>
+    <p class="intro">딥러닝의 모든 데이터는 <b>텐서(tensor)</b>, 즉 "여러 차원으로 쌓은 숫자 묶음"입니다. 학습은 이 텐서의 <b>모양(shape)</b>을 계속 바꿔가는 과정이에요. <code class="mono">reshape</code>·<code class="mono">squeeze</code>·<b>브로드캐스팅</b>이 실제로 숫자를 어떻게 옮기는지 눈으로 따라가 봅시다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 차원(rank)</button>
+    <button data-s="1">01 · reshape / view</button>
+    <button data-s="2">02 · squeeze</button>
+    <button data-s="3">03 · 브로드캐스팅</button>
+  </nav>
+
+  <!-- STEP 0 : 차원 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Rank / Dimension</span>
+    <h2>스칼라 → 벡터 → 행렬 → 3D 텐서</h2>
+    <p class="lead">차원(축)이 하나씩 늘어날 뿐, 본질은 같은 "숫자 묶음"입니다. 축 개수를 <b>rank</b> 라고 불러요.</p>
+    <div class="mx-op-row" id="rankRow"></div>
+    <p class="note" style="margin-top:8px">→ 딥러닝에서 가장 흔한 건 <b>3D~4D</b> 텐서예요. 예: 이미지 배치 <code class="mono">[배치, 채널, 높이, 너비]</code>.</p>
+  </section>
+
+  <!-- STEP 1 : reshape -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — reshape / view</span>
+    <h2>원소 개수는 보존, 모양만 재배치</h2>
+    <p class="lead"><code class="mono">reshape</code> 는 <b>같은 12개 숫자</b>를 다른 모양의 칸에 <b>순서대로(행 우선)</b> 다시 채워 넣을 뿐입니다. 곱이 12가 되는 모양이면 무엇이든 가능해요.</p>
+    <div class="view-toggle" id="shapeBtns"></div>
+    <div class="label">평탄화된 원본 (flatten) — 항상 동일</div>
+    <div id="flatView" style="margin-bottom:18px"></div>
+    <div class="label" id="shapeLabel">모양 변경 결과</div>
+    <div id="reshapeView"></div>
+    <p class="note" style="margin-top:16px">→ 곱이 12가 안 되는 모양(예: 5×3)은 <code class="mono">reshape</code> 든 <code class="mono">view</code> 든 둘 다 불가능해요(원소 개수가 안 맞으니까). <code class="mono">view</code> 의 고유한 차이는 메모리를 <b>복사하지 않고 같은 데이터를 다른 모양으로 본다</b>는 것 — 대신 메모리가 연속(contiguous)이어야 해서 <code class="mono">.t()</code>(전치) 직후엔 <code class="mono">view</code> 가 실패할 수 있습니다.</p>
+  </section>
+
+  <!-- STEP 2 : squeeze -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — squeeze / unsqueeze</span>
+    <h2>크기 1짜리 축을 없애거나(squeeze) 끼워넣기(unsqueeze)</h2>
+    <p class="lead">크기가 <b>1인 축</b>은 데이터 양에 영향이 없지만 모양에는 영향을 줍니다. 모델이 기대하는 모양을 맞출 때 자주 써요.</p>
+    <div class="callout v">
+      <div class="ttl">왜 필요할까?</div>
+      <p>예: 흑백 이미지 1장이 <code>[28, 28]</code> 인데, 모델은 <code>[배치, 채널, 28, 28]</code> 을 기대합니다. <b>unsqueeze</b> 로 앞에 크기 1 축 두 개를 끼워 <code>[1, 1, 28, 28]</code> 로 맞춥니다.</p>
+    </div>
+    <div id="squeezeView"></div>
+  </section>
+
+  <!-- STEP 3 : broadcasting -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — Broadcasting</span>
+    <h2>모양이 달라도 자동으로 늘려서 연산</h2>
+    <p class="lead">모양이 다른 두 텐서를 더할 때, 파이토치는 <b>크기 1인 축을 자동으로 복제(stretch)</b>해서 모양을 맞춥니다. 메모리는 안 늘리고 똑똑하게요.</p>
+    <div class="mx-op-row" id="bcRow"></div>
+    <div class="mx-flowtag">결과 칸을 클릭 → 어떤 두 숫자가 더해졌는지 보기</div>
+    <div id="bcDetail" class="note"></div>
+    <p class="note" style="margin-top:14px">→ <code class="mono">[3×1]</code> 은 열 방향으로, <code class="mono">[1×3]</code> 은 행 방향으로 늘어나 <code class="mono">[3×3]</code> 이 됩니다. 규칙: <b>각 축을 뒤에서부터 맞춰보고, 한쪽이 1이면 그쪽을 복제</b> (축 개수가 다르면 앞에 1을 채워 간주, 둘 다 1이 아닌데 다르면 에러).</p>
+  </section>
+
+  <p class="foot">// 모든 값은 브라우저에서 실제 계산. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '01 · Tensor');
+VZ.setupStepper();
+
+// ---------- STEP 0 : rank ----------
+(function(){
+  const scalar = [[7]];
+  const vec = [[1,2,3,4]];
+  const mat = [[1,2,3],[4,5,6]];
+  const parts = [
+    VZ.mxMatrix(scalar,{fmtCell:v=>v,acc:'var(--slate)',title:'스칼라 (rank 0)',shape:'[ ]'}),
+    VZ.mxMatrix(vec,{fmtCell:v=>v,acc:'var(--q)',title:'벡터 (rank 1)',shape:'[4]'}),
+    VZ.mxMatrix(mat,{fmtCell:v=>v,acc:'var(--hot)',title:'행렬 (rank 2)',shape:'[2×3]'}),
+  ];
+  // 3D: 두 개의 2×3 슬랩
+  const slab = (m,t)=>VZ.mxMatrix(m,{fmtCell:v=>v,acc:'var(--v)',title:t,shape:'[2×3]'});
+  const tensor3d = `<div class="mx" style="--acc:var(--v)"><div class="mx-title">3D 텐서 (rank 3) · [2×2×3]</div>
+    <div style="display:flex;gap:8px">${slab([[1,2,3],[4,5,6]],'')}${slab([[7,8,9],[10,11,12]],'')}</div></div>`;
+  document.getElementById('rankRow').innerHTML = parts.join('<div class="mx-bigop">→</div>') + '<div class="mx-bigop">→</div>' + tensor3d;
+})();
+
+// ---------- STEP 1 : reshape ----------
+(function(){
+  const flat = Array.from({length:12},(_,i)=>i+1);
+  const shapes = [[12],[3,4],[4,3],[2,6],[2,2,3],[2,3,2]];
+  const btns = document.getElementById('shapeBtns');
+  btns.innerHTML = shapes.map((s,i)=>`<button data-i="${i}" class="${i===1?'on':''}">[${s.join('×')}]</button>`).join('');
+
+  // flatten 뷰: 1×12, 인덱스 색
+  document.getElementById('flatView').innerHTML =
+    VZ.mxMatrix([flat],{fmtCell:v=>v,acc:'var(--slate)',shape:'[12]'});
+
+  function reshapeTo(shape){
+    document.getElementById('shapeLabel').textContent = `모양 변경 결과 — [${shape.join('×')}]`;
+    let html='';
+    if(shape.length===1){
+      html = VZ.mxMatrix([flat.slice()],{fmtCell:v=>v,acc:'var(--q)',shape:`[${shape[0]}]`});
+    } else if(shape.length===2){
+      const [r,c]=shape, m=[];
+      for(let i=0;i<r;i++) m.push(flat.slice(i*c,i*c+c));
+      html = VZ.mxMatrix(m,{fmtCell:v=>v,acc:'var(--q)',shape:`[${r}×${c}]`});
+    } else {
+      const [d0,d1,d2]=shape; const slabs=[];
+      for(let s=0;s<d0;s++){
+        const m=[];
+        for(let i=0;i<d1;i++){ const base=s*d1*d2+i*d2; m.push(flat.slice(base,base+d2)); }
+        slabs.push(VZ.mxMatrix(m,{fmtCell:v=>v,acc:'var(--q)',title:`slab ${s}`,shape:`[${d1}×${d2}]`}));
+      }
+      html = `<div class="mx-op-row">${slabs.join('')}</div><div class="mx-shape" style="color:var(--q)">[${shape.join('×')}]</div>`;
+    }
+    document.getElementById('reshapeView').innerHTML = html;
+  }
+  btns.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    btns.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+    reshapeTo(shapes[+b.dataset.i]);
+  });
+  reshapeTo(shapes[1]);
+})();
+
+// ---------- STEP 2 : squeeze ----------
+(function(){
+  const A = VZ.mxMatrix([[1],[2],[3]],{fmtCell:v=>v,acc:'var(--v)',title:'원본',shape:'[3×1]'});
+  const B = VZ.mxMatrix([[1,2,3]],{fmtCell:v=>v,acc:'var(--good)',title:'squeeze → 축 제거',shape:'[3]'});
+  const C = VZ.mxMatrix([[1,2,3]],{fmtCell:v=>v,acc:'var(--good)',title:'원본',shape:'[3]'});
+  const D = VZ.mxMatrix([[1,2,3]],{fmtCell:v=>v,acc:'var(--v)',title:'unsqueeze(0) → 앞에 축 추가',shape:'[1×3]'});
+  document.getElementById('squeezeView').innerHTML =
+    VZ.opRow([A,B],['squeeze →']) +
+    `<div style="height:10px"></div>` +
+    VZ.opRow([C,D],['unsqueeze →']) +
+    `<p class="mx-note">크기 1짜리 축은 칸 안의 숫자(3개)를 바꾸지 않아요. <b>모양 표기만</b> 달라집니다. squeeze=빼기, unsqueeze=끼우기.</p>`;
+})();
+
+// ---------- STEP 3 : broadcasting ----------
+(function(){
+  const A=[[10],[20],[30]];      // 3×1
+  const B=[[1,2,3]];             // 1×3
+  const R=A.map(a=>B[0].map(b=>a[0]+b)); // 3×3
+  const aM = VZ.mxMatrix(A,{fmtCell:v=>v,acc:'var(--hot)',title:'A',shape:'[3×1]'});
+  const bM = VZ.mxMatrix(B,{fmtCell:v=>v,acc:'var(--q)',title:'B',shape:'[1×3]'});
+  const rM = VZ.mxMatrix(R,{acc:'var(--good)',title:'A + B (자동 확장)',shape:'[3×3]',
+    fmtCell:(v,r,c)=>`<span data-r="${r}" data-c="${c}" style="cursor:pointer">${v}</span>`});
+  document.getElementById('bcRow').innerHTML = VZ.opRow([aM,bM,rM],['+','=']);
+  document.getElementById('bcRow').addEventListener('click',e=>{
+    const s=e.target.closest('[data-r]'); if(!s)return;
+    const r=+s.dataset.r, c=+s.dataset.c;
+    document.getElementById('bcDetail').innerHTML =
+      `결과[${r}][${c}] = A[${r}] <b style="color:var(--hot)">${A[r][0]}</b> + B[${c}] <b style="color:var(--q)">${B[0][c]}</b> = <b style="color:var(--good)">${R[r][c]}</b>`;
+  });
+  document.getElementById('bcDetail').innerHTML = '결과 칸을 클릭해 보세요.';
+})();
+</script>
+</body>
+</html>

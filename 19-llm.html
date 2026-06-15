@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>19 LLM 실전 · LoRA/RAG · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 6 · LLM</div>
+    <h1>LLM 실전 — 파인튜닝 · LoRA · RAG</h1>
+    <p class="intro">트랜스포머를 거대하게 키운 것이 <b>LLM</b>이에요. 이번 장에서는 LLM이 <b>어떻게 만들어지고</b>, 내 작업에 맞게 <b>싸게 고치는 법(LoRA)</b>과 <b>외부 지식을 찾아 읽게 하는 법(RAG)</b>, 그리고 <b>언제 무엇을 쓸지</b>까지 실전 감각으로 정리합니다.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · LLM 3단계</button>
+    <button data-s="1">01 · LoRA</button>
+    <button data-s="2">02 · RAG</button>
+    <button data-s="3">03 · 전략 가이드</button>
+  </nav>
+
+  <!-- STEP 0 : LLM 만들기 3단계 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Pretrain → SFT → RLHF</span>
+    <h2>LLM 만들기 3단계: 읽기 → 따르기 → 고르기</h2>
+    <p class="lead">ChatGPT 같은 모델은 한 번에 만들어지지 않아요. <b>사전훈련</b>으로 언어를 통째로 흡수하고, <b>SFT</b>로 지시를 따르게 하고, <b>RLHF</b>로 사람이 선호하는 답을 고르게 다듬습니다.</p>
+    <div id="pipelineView"></div>
+    <p class="note" style="margin-top:14px">→ 핵심: 사전훈련은 <b>"다음 단어 맞히기"</b>라는 단순한 게임 하나로 문법·지식·추론까지 배워요. 뒤의 두 단계는 그 거대한 능력을 <b>"조수처럼 행동하도록"</b> 방향만 잡아 주는 비교적 작은 작업입니다.</p>
+  </section>
+
+  <!-- STEP 1 : LoRA -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — LoRA (Low-Rank Adaptation)</span>
+    <h2>거대한 W는 얼리고, 곁가지만 학습한다</h2>
+    <p class="lead">LLM 전체를 파인튜닝하면 수십억 파라미터를 전부 갱신해야 해요. LoRA는 원본 가중치 <b>W를 동결(❄)</b>하고, 변화량만 <b>ΔW = B·A</b> 라는 <b>저랭크(rank r) 곁가지</b>로 학습합니다.</p>
+    <div class="callout q">
+      <div class="ttl">왜 되나?</div>
+      <p>파인튜닝으로 생기는 <b>변화량 ΔW는 사실상 저랭크</b>(소수 방향의 조합)라서, r≪d 인 작은 행렬 두 개(B·A)로도 충분히 표현돼요. <span style="color:var(--faint)">"저랭크"=큰 변화도 몇 가지 패턴의 조합으로 압축된다는 뜻 — 사진을 소수의 주요 색·윤곽으로 압축하는 것과 비슷해요.</span></p>
+      <div class="formula">h = W·x + ΔW·x = W·x + B·(A·x),&nbsp;&nbsp; A: [r×d], B: [d×r], r ≪ d</div>
+    </div>
+    <div class="label">예시 — d=8, r=2: 학습하는 건 B·A 뿐 (모든 값 실제 행렬곱)</div>
+    <div class="mx-op-row" id="loraRow"></div>
+    <div class="formula" style="margin-top:10px">추론 땐 W′ = W(❄ 동결, 그대로) + ΔW 를 한 번 합쳐 두면 속도 손해도 없어요</div>
+    <div id="loraCount" class="callout good" style="margin-top:14px"></div>
+    <div class="label" style="margin-top:20px">d와 r을 바꿔 보세요 — 절감률 실계산</div>
+    <div class="ctrl">
+      <label>차원 d</label>
+      <input type="range" id="dSlider" min="3" max="12" step="1" value="9">
+      <span class="val" id="dVal">512</span>
+    </div>
+    <div class="ctrl">
+      <label>rank r</label>
+      <input type="range" id="rSlider" min="1" max="4" step="1" value="1">
+      <span class="val" id="rVal">2</span>
+    </div>
+    <div id="loraCalc"></div>
+    <p class="note" style="margin-top:14px">→ d가 커질수록 full은 <b>d²</b>으로 폭발하지만 LoRA는 <b>2·d·r</b>로 선형 증가. 그래서 d=4096, r=8 이면 <b>0.4% 수준</b>의 파라미터만 학습해요. 학습이 끝나면 <code class="mono">W + B·A</code> 를 합쳐 두면 추론 속도 손해도 없습니다.</p>
+  </section>
+
+  <!-- STEP 2 : RAG -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — RAG (Retrieval-Augmented Generation)</span>
+    <h2>찾아서, 읽고, 답한다</h2>
+    <p class="lead">LLM이 모르는 최신 정보·사내 문서는 가르치는 대신 <b>질문할 때마다 찾아서 프롬프트에 끼워</b> 줍니다. 검색은 11장에서 배운 <b>코사인 유사도</b> 그대로예요 — 단어 빈도 벡터가 <b>임베딩 벡터</b>로 바뀌었을 뿐.</p>
+    <div class="card" style="margin-bottom:18px">
+      <div class="label">미니 지식창고 — 문서 5개 (임베딩은 교육용 3차원 하드코딩 값이에요. 실제로는 임베딩 모델이 수백 차원으로 계산합니다)</div>
+      <div id="docList"></div>
+    </div>
+    <div class="label">질문을 골라 보세요</div>
+    <div class="row" id="qBtns" style="margin-bottom:14px"></div>
+    <div class="label" id="rankLabel">① 질문 임베딩 vs 문서 임베딩 — 코사인 유사도 (실제 계산)</div>
+    <div id="ragRank"></div>
+    <div class="label" style="margin-top:20px">② 상위 2개 문서를 프롬프트에 끼워 넣기</div>
+    <div id="ragPrompt"></div>
+    <div class="callout good" style="margin-top:16px">
+      <div class="ttl">왜 RAG인가</div>
+      <p><b>환각 감소</b>: 모델이 기억을 지어내는 대신 눈앞의 컨텍스트를 인용해요. <b>최신성</b>: 문서만 갈아끼우면 재학습 없이 오늘 자 정보로 답합니다. 출처 표시도 쉬워요.</p>
+    </div>
+  </section>
+
+  <!-- STEP 3 : 전략 가이드 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — 프롬프팅 vs RAG vs 파인튜닝</span>
+    <h2>무엇을 언제 쓸까 — 전략 선택 가이드</h2>
+    <p class="lead">셋은 경쟁자가 아니라 <b>비용 사다리</b>예요. 싼 것부터 시도하고, 안 되면 한 칸씩 올라갑니다.</p>
+    <div style="overflow-x:auto"><table class="calc" id="strategyTable"></table></div>
+    <div class="label" style="margin-top:24px">결정 플로차트</div>
+    <div id="flowchart"></div>
+    <div class="callout v" style="margin-top:24px">
+      <div class="ttl">여기까지 온 학습 여정</div>
+      <p>2장에서 <b>텐서</b>라는 숫자 묶음으로 출발해, 3장 <b>회귀</b>로 "학습 = 손실 줄이기"를 배웠고, 5장에서 층을 쌓아 <b>신경망</b>을 만들었어요. 7장 <b>RNN</b>·8장 <b>CNN</b>으로 순서와 공간을 다루고, 11장 <b>유사도</b>와 12장 <b>Word2Vec</b>으로 "의미를 벡터에 담는 법"을, 17장 <b>어텐션</b>·18장 <b>트랜스포머</b>로 "필요한 곳을 골라 보는 법"을 익혔죠. LLM은 이 모든 부품의 총합이고, 오늘 배운 LoRA·RAG는 그 거인을 <b>내 문제에 붙이는 손잡이</b>입니다. 수고하셨어요!</p>
+    </div>
+  </section>
+
+  <p class="foot">// 파라미터 수·행렬곱·코사인 유사도는 브라우저에서 실제 계산. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '19 · LLM');
+VZ.setupStepper();
+
+// ---------- STEP 0 : LLM 3단계 파이프라인 ----------
+(function(){
+  const stages = [
+    {
+      name:'① 사전훈련 (Pretraining)', col:'var(--q)',
+      goal:'다음 단어 맞히기',
+      data:'수조(조 단위) 토큰 — 웹·책·코드 전체',
+      ex:'"대한민국의 수도는 ___" → "서울"',
+      out:'언어·지식·추론을 통째로 흡수한 베이스 모델'
+    },
+    {
+      name:'② SFT (지도 미세조정)', col:'var(--hot)',
+      goal:'지시 따르기',
+      data:'수만~수십만 개의 "지시 → 모범답안" 쌍',
+      ex:'"이메일을 정중하게 고쳐줘" → 모범 답변',
+      out:'질문에 조수처럼 답하는 instruct 모델'
+    },
+    {
+      name:'③ RLHF / 선호 최적화', col:'var(--good)',
+      goal:'사람이 좋아하는 답 고르기',
+      data:'수만 개의 "답변 A vs B 중 선호" 비교 쌍',
+      ex:'장황한 답 vs 간결·정확한 답 → 후자 선호',
+      out:'유용하고 안전한 최종 챗 모델'
+    }
+  ];
+  const card = s => `<div class="card" style="flex:1;min-width:220px;border-color:${s.col}">
+    <h4 style="color:${s.col}">${s.name}</h4>
+    <div class="label">배우는 것</div>
+    <p style="margin:0 0 10px;font-size:14px"><b class="h">${s.goal}</b></p>
+    <div class="label">데이터 규모</div>
+    <p style="margin:0 0 10px;font-size:13.5px">${s.data}</p>
+    <div class="label">예시</div>
+    <p class="mono" style="margin:0 0 10px;font-size:12px;color:var(--muted)">${s.ex}</p>
+    <div class="label">결과</div>
+    <p style="margin:0;font-size:13.5px;color:${s.col}">${s.out}</p>
+  </div>`;
+  document.getElementById('pipelineView').innerHTML =
+    `<div class="row" style="align-items:stretch">` +
+    stages.map(card).join('<div class="op" style="align-self:center">→</div>') +
+    `</div>`;
+})();
+
+// ---------- STEP 1 : LoRA ----------
+(function(){
+  // d=8, r=2 예시 행렬 (결정적 생성)
+  const d = 8, r = 2;
+  const A = Array.from({length:r},(_,i)=>Array.from({length:d},(_,j)=>+(((i*5+j*3)%7-3)/10).toFixed(1)));
+  const B = Array.from({length:d},(_,i)=>Array.from({length:r},(_,j)=>+(((i*2+j*5)%5-2)/10).toFixed(1)));
+  const dW = VZ.matMul(B, A); // ΔW = B·A (실계산)
+
+  const f1 = v => VZ.fmt(v,1);
+  const bM = VZ.mxMatrix(B,{acc:'var(--q)',title:'B (학습)',shape:`[${d}×${r}]`,fmtCell:f1,zeroDim:true});
+  const aM = VZ.mxMatrix(A,{acc:'var(--hot)',title:'A (학습)',shape:`[${r}×${d}]`,fmtCell:f1,zeroDim:true});
+  const dwM = VZ.mxMatrix(dW,{acc:'var(--good)',title:'ΔW = B·A (실제 행렬곱)',shape:`[${d}×${d}]`,fmtCell:v=>VZ.fmt(v,2),zeroDim:true});
+  // 올바른 등식만 그린다: B × A = ΔW. (W는 동결이라 이 곱셈에 등장하지 않음)
+  document.getElementById('loraRow').innerHTML = VZ.opRow([bM,aM,dwM],['×','=']);
+
+  const fullP = d*d, loraP = d*r + r*d;
+  document.getElementById('loraCount').innerHTML =
+    `<div class="ttl">파라미터 수 (실계산)</div>
+     <p>full 파인튜닝 = d×d = ${d}×${d} = <b class="h">${fullP}개</b> &nbsp;vs&nbsp;
+     LoRA = A(${r}×${d}=${r*d}) + B(${d}×${r}=${d*r}) = <b style="color:var(--good)">${loraP}개</b>
+     — 이 작은 예시에서도 <b style="color:var(--good)">${VZ.fmt(loraP/fullP*100,0)}%</b>만 학습해요.</p>`;
+
+  // ---- d 슬라이더 (로그스케일 2^3 ~ 2^12) + r 슬라이더 (2^1 ~ 2^4) ----
+  const dS = document.getElementById('dSlider');
+  const rS = document.getElementById('rSlider');
+  function update(){
+    const dd = Math.pow(2, +dS.value);   // 8 ~ 4096
+    const rr = Math.pow(2, +rS.value);   // 2 ~ 16
+    document.getElementById('dVal').textContent = dd;
+    document.getElementById('rVal').textContent = rr;
+    const full = dd*dd, lora = 2*dd*rr;
+    const pct = lora/full*100;
+    const frac = Math.min(1, lora/full);
+    const broken = pct >= 100; // r이 d/2 이상이면 LoRA가 오히려 큼 — 전제(r≪d) 붕괴
+    document.getElementById('loraCalc').innerHTML =
+      VZ.barRow('full', 1, {color:'var(--k)', pctText: full.toLocaleString()+'개'}) +
+      VZ.barRow('LoRA', Math.max(frac, 0.004), {color: broken ? 'var(--k)' : 'var(--good)', pctText: lora.toLocaleString()+'개'}) +
+      `<p class="mx-note">d=${dd}, r=${rr} → LoRA/full = 2dr/d² = ${(2*rr).toLocaleString()}/${dd.toLocaleString()} =
+       <b style="color:${broken ? 'var(--k)' : 'var(--good)'}">${pct < 1 ? VZ.fmt(pct,2) : VZ.fmt(pct,1)}%</b>
+       ${broken
+         ? '— <b style="color:var(--k)">⚠ r이 d/2 이상이면 LoRA가 오히려 더 큽니다. r ≪ d 가 전제예요!</b>'
+         : `(절감률 <b class="h">${VZ.fmt(100-pct,1)}%</b>)`}</p>`;
+  }
+  dS.addEventListener('input', update);
+  rS.addEventListener('input', update);
+  update();
+})();
+
+// ---------- STEP 2 : RAG ----------
+(function(){
+  // 미니 문서 5개 — 임베딩은 교육용 3차원 하드코딩 (정직 고지는 본문에)
+  const DOCS = [
+    { id:'D1', text:'환불 규정: 구매 후 7일 이내에는 전액 환불이 가능합니다.',        emb:[0.92, 0.10, 0.08] },
+    { id:'D2', text:'배송 안내: 결제 후 평균 2~3일, 도서산간은 1~2일 추가됩니다.',     emb:[0.15, 0.90, 0.10] },
+    { id:'D3', text:'회원 등급: 연간 구매액에 따라 실버·골드·VIP로 나뉩니다.',         emb:[0.08, 0.15, 0.88] },
+    { id:'D4', text:'교환 절차: 환불 대신 동일 상품으로 교환을 신청할 수 있습니다.',   emb:[0.80, 0.30, 0.15] },
+    { id:'D5', text:'고객센터: 평일 9시~18시 운영, 주말·공휴일은 휴무입니다.',         emb:[0.30, 0.45, 0.40] },
+  ];
+  const QS = [
+    { label:'환불은 어떻게 받나요?',      emb:[0.95, 0.12, 0.10],
+      ans:'구매 후 7일 이내라면 전액 환불이 가능하고, 원하시면 환불 대신 동일 상품 교환도 신청할 수 있어요.' },
+    { label:'배송은 며칠 걸려요?',        emb:[0.12, 0.95, 0.15],
+      ans:'결제 후 평균 2~3일 걸리고, 도서산간 지역은 1~2일 더 걸릴 수 있어요.' },
+    { label:'VIP 등급 조건이 뭐예요?',    emb:[0.10, 0.18, 0.94],
+      ans:'회원 등급은 연간 구매액 기준으로 실버·골드·VIP로 나뉘어요. 자세한 금액 기준은 문서에 없어 안내가 어려워요.' },
+  ];
+  const COLS = ['var(--q)','var(--k)','var(--v)','var(--hot)','var(--good)'];
+
+  const norm = v => Math.sqrt(v.reduce((s,x)=>s+x*x,0));
+  const cosine = (a,b) => {
+    const na = norm(a), nb = norm(b);
+    return (na===0||nb===0) ? 0 : VZ.dot(a,b)/(na*nb);
+  };
+
+  document.getElementById('docList').innerHTML = DOCS.map((d,i)=>
+    `<div style="margin:7px 0;font-size:13.5px">
+      <span class="tagchip" style="background:rgba(55,189,248,.12);color:${COLS[i]}">${d.id}</span>
+      <span style="margin:0 6px">${d.text}</span>
+      <span class="mono" style="font-size:11px;color:var(--faint)">emb=[${d.emb.join(', ')}]</span>
+    </div>`).join('');
+
+  const btns = document.getElementById('qBtns');
+  btns.innerHTML = QS.map((q,i)=>
+    `<button class="btn" data-q="${i}" style="${i===0?'background:var(--q);color:#04121f':''}">${q.label}</button>`).join('');
+
+  function ask(qi){
+    const q = QS[qi];
+    document.getElementById('rankLabel').textContent =
+      `① "${q.label}" 임베딩 [${q.emb.join(', ')}] vs 문서 임베딩 — 코사인 유사도 (실제 계산)`;
+
+    const sims = DOCS.map((d,i)=>({i, sim: cosine(q.emb, d.emb)})).sort((a,b)=>b.sim-a.sim);
+    document.getElementById('ragRank').innerHTML = sims.map((o,rank)=>
+      VZ.barRow(DOCS[o.i].id, Math.max(0,o.sim), {win: rank<2, color: COLS[o.i], pctText: VZ.fmt(o.sim,3)})
+    ).join('') + `<p class="mx-note">상위 <b>2개</b> 문서가 검색 결과로 뽑혀 프롬프트에 들어가요 (🏆 표시).</p>`;
+
+    const top2 = sims.slice(0,2);
+    document.getElementById('ragPrompt').innerHTML =
+      `<div class="callout q" style="margin-bottom:0">
+        <div class="ttl mono" style="font-size:13px">PROMPT</div>
+        <p class="mono" style="font-size:12.5px;color:var(--muted)">아래 컨텍스트만 근거로 답하세요.</p>
+        ${top2.map(o=>`<p class="mono" style="font-size:12.5px;border-left:3px solid ${COLS[o.i]};padding-left:10px">
+          [${DOCS[o.i].id} · sim ${VZ.fmt(o.sim,3)}] ${DOCS[o.i].text}</p>`).join('')}
+        <p class="mono" style="font-size:12.5px;color:var(--q)">질문: ${q.label}</p>
+      </div>
+      <div class="arrow-v">↓ LLM이 컨텍스트를 읽고 생성</div>
+      <div class="callout good" style="margin-bottom:0">
+        <div class="ttl">답변</div>
+        <p>${q.ans}</p>
+      </div>`;
+  }
+
+  btns.addEventListener('click', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    btns.querySelectorAll('button').forEach(x=>x.style.cssText='');
+    b.style.cssText = 'background:var(--q);color:#04121f';
+    ask(+b.dataset.q);
+  });
+  ask(0);
+})();
+
+// ---------- STEP 3 : 전략 가이드 ----------
+(function(){
+  const rows = [
+    ['프롬프팅',      '거의 0',   '쉬움 (지금 바로)', '먼저 무조건 시도. 예시 몇 개(few-shot)로 해결되는 일이 의외로 많아요'],
+    ['RAG',           '낮음~중간','중간 (검색 구축)', '지식이 자주 바뀜 · 사내 문서 · 출처가 필요할 때'],
+    ['파인튜닝(LoRA)','중간~높음','어려움 (데이터+GPU)','말투·형식·도메인 스타일을 모델 자체에 새기고 싶을 때'],
+  ];
+  document.getElementById('strategyTable').innerHTML =
+    `<thead><tr><th>전략</th><th>비용</th><th>난이도</th><th>언제 쓰나</th></tr></thead>
+     <tbody>${rows.map(r=>
+       `<tr><td><b class="h">${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td style="text-align:left;color:var(--muted)">${r[3]}</td></tr>`
+     ).join('')}</tbody>`;
+
+  const qBox = (t)=>`<div class="card" style="text-align:center;max-width:420px;margin:0 auto"><b>${t}</b></div>`;
+  const ansBox = (t,col)=>`<div class="card" style="text-align:center;border-color:${col};max-width:420px;margin:0 auto"><b style="color:${col}">${t}</b></div>`;
+  const yes = `<div class="arrow-v" style="margin:8px 0">예 ↓</div>`;
+  const no  = `<div class="arrow-v" style="margin:8px 0">아니오 ↓</div>`;
+  document.getElementById('flowchart').innerHTML =
+    `<div style="margin-top:10px">
+      ${qBox('지식이 자주 바뀌거나, 출처·사내 문서가 필요한가?')}
+      ${yes}${ansBox('→ RAG 부터', 'var(--v)')}
+      ${no}
+      ${qBox('말투·형식·전문 스타일을 모델에 새기고 싶은가?')}
+      ${yes}${ansBox('→ 파인튜닝 (LoRA)', 'var(--hot)')}
+      ${no}
+      ${ansBox('→ 프롬프팅으로 시작 (가장 싸고 빠름)', 'var(--good)')}
+    </div>
+    <p class="note" style="margin-top:14px">→ 실무에선 <b>섞어</b> 써요: 프롬프팅으로 검증 → RAG로 지식 연결 → 그래도 부족하면 LoRA. 셋 다 쓰는 서비스도 흔합니다.</p>`;
+})();
+</script>
+</body>
+</html>

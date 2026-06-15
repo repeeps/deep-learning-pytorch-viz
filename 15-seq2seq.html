@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15 Seq2Seq · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">PART 5 · ATTENTION</div>
+    <h1>Seq2Seq — 읽는 RNN과 쓰는 RNN의 협업</h1>
+    <p class="intro">"나는 학생 이다"(3단어)를 "I am a student"(4단어)로 번역하려면 <b>입력 길이 ≠ 출력 길이</b> 문제를 풀어야 해요. Seq2Seq는 문장을 읽어 벡터로 압축하는 <b>인코더</b>와, 그 벡터에서 단어를 하나씩 꺼내 쓰는 <b>디코더</b> — 두 RNN을 이어 붙여 이 문제를 풉니다. 마지막엔 번역 품질을 숫자로 재는 <b>BLEU</b>까지 직접 계산해 봐요.</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 두 RNN의 협업</button>
+    <button data-s="1">01 · 인코더: 압축</button>
+    <button data-s="2">02 · 디코더: 생성</button>
+    <button data-s="3">03 · BLEU 점수</button>
+  </nav>
+
+  <!-- STEP 0 : 구조 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — Encoder · Decoder</span>
+    <h2>읽기 담당 + 쓰기 담당, 두 개의 RNN</h2>
+    <p class="lead">일반 RNN은 입력 한 칸마다 출력 한 칸 — 길이가 항상 같아요. 번역처럼 <b>입력 3단어 → 출력 4단어</b>가 되려면, "다 읽고 나서 쓰기 시작"하는 구조가 필요합니다. 그게 <b>인코더-디코더</b>예요.</p>
+    <div class="mx-op-row" id="archRow"></div>
+    <div class="callout q">
+      <div class="ttl">왜 길이 문제가 풀릴까?</div>
+      <p><b>인코더</b>는 입력을 끝까지 읽고 마지막 hidden 상태 하나 — <b>컨텍스트 벡터</b> — 만 넘겨요. 입력이 몇 단어든 결과는 항상 같은 크기의 벡터 1개.</p>
+      <p><b>디코더</b>는 그 벡터에서 출발해 <code>&lt;eos&gt;</code>(문장 끝)가 나올 때까지 단어를 계속 뽑아요. 몇 개를 뽑을지는 디코더가 스스로 정하니 출력 길이도 자유롭습니다.</p>
+    </div>
+    <div class="callout good">
+      <div class="ttl">예고 — 이 구조의 약점과 17장</div>
+      <p>문장 전체를 <b>벡터 하나</b>에 욱여넣으니, 문장이 길어지면 앞쪽 정보가 희미해져요(병목). 다음 장 <b>17장 어텐션</b>이 바로 이 병목을 푸는 개선판입니다.</p>
+    </div>
+  </section>
+
+  <!-- STEP 1 : 인코더 -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Encoder</span>
+    <h2>문장을 컨텍스트 벡터 하나로 압축</h2>
+    <p class="lead">작은 RNN(hidden 2차원)이 "나는 → 학생 → 이다"를 한 단어씩 읽으며 <b>h<sub>t</sub> = tanh(x<sub>t</sub>·W<sub>x</sub> + h<sub>t-1</sub>·W<sub>h</sub> + b)</b> 로 기억을 갱신해요. 버튼으로 한 단어씩 진행해 보세요.</p>
+    <div class="note" style="margin-bottom:14px">⚠ 정직 고지: 아래 임베딩·가중치는 <b>"학습이 끝났다고 가정"한 하드코딩 값</b>이에요. 계산 자체는 전부 브라우저에서 실제로 수행합니다.</div>
+    <div class="mx-op-row" id="encWeights"></div>
+    <div class="row" style="margin:14px 0">
+      <button class="btn" id="encNext">▶ 다음</button>
+      <button class="btn" id="encReset" style="border-color:var(--line);color:var(--muted);background:transparent">↺ 처음부터</button>
+      <span id="encProgress" class="mono" style="font-size:13px;color:var(--muted)"></span>
+    </div>
+    <div id="encStage"></div>
+  </section>
+
+  <!-- STEP 2 : 디코더 -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — Decoder</span>
+    <h2>자기회귀 생성 — 내 출력이 다음 입력</h2>
+    <p class="lead">디코더는 <b>컨텍스트 벡터</b>를 첫 기억으로, <code>&lt;sos&gt;</code>를 첫 입력으로 출발해요. 매 스텝 <b>softmax로 어휘 6개의 확률</b>을 계산하고, argmax 단어를 뽑아 <b>다음 스텝의 입력</b>으로 되먹입니다. <code>&lt;eos&gt;</code>가 나오면 종료!</p>
+    <div class="note" style="margin-bottom:14px">어휘는 <span class="mono">&lt;sos&gt;, I, am, a, student, &lt;eos&gt;</span> 6개. 가중치는 역시 "학습 완료 가정" 하드코딩이지만, 매 스텝의 hidden·logits·softmax는 <b>전부 실계산</b>이에요.</div>
+    <div class="row" style="margin:6px 0 14px">
+      <button class="btn" id="decNext">▶ 다음 단어 생성</button>
+      <button class="btn" id="decReset" style="border-color:var(--line);color:var(--muted);background:transparent">↺ 처음부터</button>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="label">생성된 문장 (자기회귀)</div>
+      <div id="decSeq"></div>
+    </div>
+    <div id="decStage"></div>
+    <div class="callout v" style="margin-top:20px">
+      <div class="ttl">학습할 땐? — Teacher Forcing</div>
+      <p>학습 초기 디코더는 엉뚱한 단어를 뽑고, 그걸 다시 입력하면 <b>오류가 눈덩이처럼 굴러가요</b>. 그래서 학습 중엔 디코더 출력 대신 <b>정답 단어를 다음 입력으로 강제 주입</b>합니다 — 이게 teacher forcing.</p>
+      <p>대신 추론(번역) 때는 정답이 없으니 위 데모처럼 <b>자기 출력</b>을 되먹여요. 이 학습/추론 차이가 Seq2Seq의 고질적 어려움(exposure bias) 중 하나입니다.</p>
+    </div>
+  </section>
+
+  <!-- STEP 3 : BLEU -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — BLEU</span>
+    <h2>번역 품질을 숫자 하나로 — n-gram 겹침 측정</h2>
+    <p class="lead">BLEU는 예측문과 정답문의 <b>1~4-gram이 얼마나 겹치는지</b>(precision)를 기하평균하고, 짧은 문장엔 <b>brevity penalty(BP)</b>로 벌점을 줘요. 예측문을 바꿔가며 점수가 어떻게 변하는지 보세요.</p>
+    <div class="card" style="margin-bottom:14px">
+      <div class="label">정답문 (reference)</div>
+      <div id="bleuRef"></div>
+    </div>
+    <div class="view-toggle" id="bleuBtns"></div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="label">예측문 (candidate)</div>
+      <div id="bleuCand"></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h4 style="color:var(--q)">① n-gram precision — 겹치는 조각 세기 <span style="color:var(--muted);font-weight:400">(초록 = 정답문에 있음)</span></h4>
+      <div id="bleuGrams"></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h4 style="color:var(--hot)">② Brevity Penalty — 왜 짧으면 벌점?</h4>
+      <div id="bleuBP"></div>
+    </div>
+    <div class="card">
+      <h4 style="color:var(--good)">③ 최종 BLEU = BP × exp(평균 log p<sub>n</sub>)</h4>
+      <div id="bleuFinal"></div>
+    </div>
+    <p class="note" style="margin-top:16px" id="bleuNote"></p>
+  </section>
+
+  <p class="foot">// 모든 값은 브라우저에서 실제 계산. 교육용 단순화. · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '15 · Seq2Seq');
+VZ.setupStepper();
+
+// ============================================================
+// 공통 데이터 — "학습 완료 가정" 하드코딩 가중치
+// (생성 시퀀스 I am a student <eos> 는 node 로 사전 검산됨)
+// ============================================================
+const SRC = ['나는', '학생', '이다'];
+const TGT = ['I', 'am', 'a', 'student'];
+
+// 인코더: 한국어 임베딩(2차원) + RNN 가중치
+const EMB_KO = { '나는': [1.0, 0.3], '학생': [-0.5, 0.9], '이다': [0.7, -0.6] };
+const WxE = [[0.9, -0.3], [0.4, 0.8]];
+const WhE = [[0.6, 0.2], [-0.4, 0.7]];
+const bE  = [0.1, -0.2];
+
+// 디코더: 영어 어휘 6개, 임베딩(2차원) + RNN + 출력층
+const VOCAB = ['<sos>', 'I', 'am', 'a', 'student', '<eos>'];
+const EMB_EN = {
+  '<sos>':   [0, 1.2],
+  'I':       [-1.1413, 0.3708],
+  'am':      [-0.7053, -0.9708],
+  'a':       [0.7053, -0.9708],
+  'student': [1.1413, 0.3708],
+  '<eos>':   [0, 0]
+};
+const WxD = [[1.5, 0], [0, 1.5]];
+const WhD = [[0.12, 0], [0, 0.12]];
+const bD  = [0, 0];
+// 출력층 W_out(2×6): logits = h'·W_out + b_out
+const WOUT = [
+  [0, 0,   -2.3776, -1.4695, 1.4695,  2.3776],
+  [0, 2.5,  0.7725, -2.0225, -2.0225, 0.7725]
+];
+const BOUT = [-6, 0, 0, 0, 0, 0];   // <sos>는 다시 못 나오게 큰 음수 bias
+
+// 작은 공용 헬퍼
+const addV  = (a, b) => a.map((x, i) => x + b[i]);
+const tanhV = (v) => v.map(x => Math.tanh(x));
+const rnnStep = (x, h, Wx, Wh, b) => {
+  const pre = addV(addV(VZ.vecMat(x, Wx), VZ.vecMat(h, Wh)), b);
+  return { pre, h: tanhV(pre) };
+};
+const esc = (w) => w.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const chip = (w, color) =>
+  `<div class="vec neutral" style="margin:2px"><span class="n" style="min-width:60px;${color ? `background:${color};color:#04121f` : ''}">${esc(w)}</span></div>`;
+
+// 인코더 전체를 미리 계산 (Step 0/1/2 가 공유)
+const ENC_TRACE = (() => {
+  let h = [0, 0];
+  return SRC.map(w => {
+    const st = rnnStep(EMB_KO[w], h, WxE, WhE, bE);
+    const rec = { word: w, hPrev: h, pre: st.pre, h: st.h };
+    h = st.h;
+    return rec;
+  });
+})();
+const CTX = ENC_TRACE[ENC_TRACE.length - 1].h;   // 컨텍스트 벡터
+
+// ---------- STEP 0 : 구조 도식 ----------
+(function () {
+  const enc = `<div class="mx" style="--acc:var(--q)"><div class="mx-title">인코더 RNN — 읽기 담당 (입력 3단어)</div>
+    <div class="mx-op-row" style="padding:0">${SRC.map(w => chip(w, 'var(--q)')).join('<div class="mx-bigop">→</div>')}</div>
+    <div class="mx-shape" style="color:var(--q)">h 갱신 × 3회</div></div>`;
+  const ctx = VZ.mxMatrix([CTX.map(x => +x.toFixed(2))],
+    { acc: 'var(--hot)', title: '컨텍스트 벡터 (마지막 h)', shape: '[1×2]' });
+  const dec = `<div class="mx" style="--acc:var(--v)"><div class="mx-title">디코더 RNN — 쓰기 담당 (출력 4단어 + &lt;eos&gt;)</div>
+    <div class="mx-op-row" style="padding:0">${TGT.concat(['<eos>']).map(w => chip(w, w === '<eos>' ? null : 'var(--v)')).join('<div class="mx-bigop">→</div>')}</div>
+    <div class="mx-shape" style="color:var(--v)">스스로 멈출 때까지 생성</div></div>`;
+  document.getElementById('archRow').innerHTML = VZ.opRow([enc, ctx, dec], ['압축 →', '→ 시작']);
+})();
+
+// ---------- STEP 1 : 인코더 실계산 ----------
+(function () {
+  // 가중치/임베딩 공개
+  document.getElementById('encWeights').innerHTML = VZ.opRow([
+    VZ.mxMatrix(SRC.map(w => EMB_KO[w]),
+      { acc: 'var(--q)', title: '임베딩 x (단어→2차원)', rowLabs: SRC, shape: '[3×2]' }),
+    VZ.mxMatrix(WxE, { acc: 'var(--slate)', title: 'W<sub>x</sub>', shape: '[2×2]' }),
+    VZ.mxMatrix(WhE, { acc: 'var(--slate)', title: 'W<sub>h</sub>', shape: '[2×2]' }),
+    VZ.mxMatrix([bE], { acc: 'var(--slate)', title: 'b', shape: '[1×2]' })
+  ], [',', ',', ',']); // 나열 갤러리 — 실제 식은 h=tanh(x·Wx + h·Wh + b)
+
+  let t = 0;   // 다음에 처리할 토큰 인덱스
+  const stage = document.getElementById('encStage');
+
+  const tokChips = () => SRC.map((w, i) => {
+    const col = i < t ? 'var(--good)' : (i === t ? 'var(--hot)' : null);
+    return chip(w, col);
+  }).join('');
+
+  function dimCalc(rec) {
+    // 각 차원의 pre 계산식 풀어쓰기
+    return [0, 1].map(j => {
+      const x = EMB_KO[rec.word], hp = rec.hPrev;
+      const terms =
+        `${VZ.fmt(x[0])}·${VZ.fmt(WxE[0][j])} + ${VZ.fmt(x[1])}·${VZ.fmt(WxE[1][j])}` +
+        ` + ${VZ.fmt(hp[0])}·${VZ.fmt(WhE[0][j])} + ${VZ.fmt(hp[1])}·${VZ.fmt(WhE[1][j])}` +
+        ` + ${VZ.fmt(bE[j])}`;
+      return `<tr><td>h[${j}]</td><td style="color:var(--muted)">tanh(${terms})</td>` +
+             `<td>tanh(${VZ.fmt(rec.pre[j], 3)})</td>` +
+             `<td><b style="color:var(--q)">${VZ.fmt(rec.h[j], 3)}</b></td></tr>`;
+    }).join('');
+  }
+
+  function render() {
+    const done = t >= SRC.length;
+    document.getElementById('encProgress').textContent = done ? '완료! 3/3' : `진행 ${t}/3`;
+    document.getElementById('encNext').disabled = done;
+    document.getElementById('encNext').style.opacity = done ? 0.4 : 1;
+
+    let html = `<div class="row" style="margin-bottom:14px"><span class="label" style="margin:0">입력 진행:</span>${tokChips()}</div>`;
+    html += `<div class="formula" style="margin-bottom:14px">h<sub>t</sub> = tanh( x<sub>t</sub>·W<sub>x</sub> + h<sub>t-1</sub>·W<sub>h</sub> + b ) &nbsp;·&nbsp; h<sub>0</sub> = [0, 0]</div>`;
+
+    if (t === 0) {
+      html += `<p class="note">아직 아무것도 읽지 않았어요. h<sub>0</sub> = [0.00, 0.00] 에서 <b>▶ 다음</b>으로 "나는"부터 읽어 봅시다.</p>`;
+    } else {
+      const rec = ENC_TRACE[t - 1];
+      html += VZ.opRow([
+        VZ.mxMatrix([EMB_KO[rec.word]], { acc: 'var(--q)', title: `x<sub>${t}</sub> = "${rec.word}"`, shape: '[1×2]' }),
+        VZ.mxMatrix([rec.hPrev.map(x => +x.toFixed(3))], { acc: 'var(--slate)', title: `h<sub>${t - 1}</sub> (이전 기억)`, shape: '[1×2]' }),
+        VZ.mxMatrix([rec.h.map(x => +x.toFixed(3))], { acc: 'var(--hot)', title: `h<sub>${t}</sub> (새 기억)`, shape: '[1×2]' })
+      ], ['+', '⇒ tanh ⇒']);
+      html += `<table class="calc"><thead><tr><th>차원</th><th>계산식 (x·W<sub>x</sub> + h·W<sub>h</sub> + b)</th><th>tanh 직전</th><th>결과</th></tr></thead><tbody>${dimCalc(rec)}</tbody></table>`;
+    }
+
+    if (done) {
+      html += `<div class="callout good" style="margin-top:18px">
+        <div class="ttl">컨텍스트 벡터 완성!</div>
+        <p>마지막 h<sub>3</sub> = <b class="mono">[${CTX.map(x => VZ.fmt(x, 3)).join(', ')}]</b> 가 문장 "나는 학생 이다" 전체의 요약 — <b>컨텍스트 벡터</b>예요. 디코더는 이 숫자 2개만 들고 번역을 시작합니다. (이 "전부를 벡터 하나에" 가 17장에서 다룰 병목!)</p>
+      </div>`;
+    } else if (t > 0) {
+      html += `<p class="note" style="margin-top:12px">→ h 가 이전 기억과 새 단어를 섞으며 갱신됐어요. 계속 <b>▶ 다음</b>!</p>`;
+    }
+    stage.innerHTML = html;
+  }
+
+  document.getElementById('encNext').addEventListener('click', () => {
+    if (t < SRC.length) { t += 1; render(); }
+  });
+  document.getElementById('encReset').addEventListener('click', () => { t = 0; render(); });
+  render();
+})();
+
+// ---------- STEP 2 : 디코더 자기회귀 생성 ----------
+(function () {
+  const MAX_T = 8;
+  let state = null;
+  const stage = document.getElementById('decStage');
+  const seqEl = document.getElementById('decSeq');
+
+  function freshState() {
+    return { h: CTX.slice(), prev: '<sos>', t: 0, seq: [], done: false, last: null };
+  }
+
+  function decodeOnce(s) {
+    const st = rnnStep(EMB_EN[s.prev], s.h, WxD, WhD, bD);
+    const logits = addV(VZ.vecMat(st.h, WOUT), BOUT);
+    const probs = VZ.softmax(logits);
+    const ai = probs.indexOf(Math.max(...probs));
+    const word = VOCAB[ai];
+    return {
+      ...s,
+      h: st.h,
+      t: s.t + 1,
+      prev: word,
+      seq: word === '<eos>' ? s.seq : s.seq.concat([word]),
+      hitEos: word === '<eos>',
+      done: word === '<eos>' || s.t + 1 >= MAX_T,
+      last: { input: s.prev, hPrev: s.h, h: st.h, logits, probs, ai, word }
+    };
+  }
+
+  function renderSeq(s) {
+    const items = ['<sos>'].concat(s.seq).concat(s.hitEos ? ['<eos>'] : []); // eos를 실제로 뽑았을 때만 표시
+    seqEl.innerHTML = `<div class="row">${items.map((w, i) => {
+      const isCtl = w === '<sos>' || w === '<eos>';
+      return chip(w, isCtl ? null : 'var(--good)') +
+        (i < items.length - 1 ? '<span class="op" style="font-size:15px">→</span>' : '');
+    }).join('')}${s.done ? '' : '<span class="op" style="font-size:15px;color:var(--hot)">…?</span>'}</div>`;
+  }
+
+  function render(s) {
+    renderSeq(s);
+    document.getElementById('decNext').disabled = s.done;
+    document.getElementById('decNext').style.opacity = s.done ? 0.4 : 1;
+
+    if (!s.last) {
+      stage.innerHTML = `<div class="card">
+        <p class="note" style="margin:0">출발 준비 완료 — 첫 기억 h′<sub>0</sub> = 컨텍스트 <b class="mono">[${CTX.map(x => VZ.fmt(x, 3)).join(', ')}]</b>, 첫 입력 = <b class="mono">&lt;sos&gt;</b>. <b>▶ 다음 단어 생성</b>을 눌러 보세요.</p>
+      </div>`;
+      return;
+    }
+
+    const L = s.last;
+    let html = VZ.opRow([
+      VZ.mxMatrix([EMB_EN[L.input]], { acc: 'var(--v)', title: `입력 "${esc(L.input)}" 임베딩`, shape: '[1×2]' }),
+      VZ.mxMatrix([L.hPrev.map(x => +x.toFixed(3))], { acc: 'var(--slate)', title: `h′<sub>${s.t - 1}</sub>`, shape: '[1×2]' }),
+      VZ.mxMatrix([L.h.map(x => +x.toFixed(3))], { acc: 'var(--hot)', title: `h′<sub>${s.t}</sub> = tanh(x·W<sub>x</sub>+h·W<sub>h</sub>+b)`, shape: '[1×2]' })
+    ], ['+', '⇒']);
+
+    html += `<div class="card" style="margin-top:14px"><h4 style="color:var(--q)">softmax( h′·W<sub>out</sub> + b<sub>out</sub> ) — 어휘 6개의 확률</h4>` +
+      VOCAB.map((w, i) =>
+        VZ.barRow(esc(w), L.probs[i], { win: i === L.ai, pctText: (L.probs[i] * 100).toFixed(1) + '%' })
+      ).join('') +
+      `<p class="mx-note" style="margin-top:10px">logits = [${L.logits.map(x => VZ.fmt(x)).join(', ')}] → softmax 합 = ${VZ.fmt(L.probs.reduce((a, b) => a + b, 0), 3)}. argmax = <b>"${esc(L.word)}"</b></p></div>`;
+
+    if (s.done && s.hitEos) {
+      html += `<div class="callout good" style="margin-top:14px"><div class="ttl">&lt;eos&gt; — 생성 종료!</div>
+        <p>완성된 번역: <b class="mono">${s.seq.join(' ')}</b> — "나는 학생 이다"의 번역이 끝났어요. 디코더가 <b>스스로 멈춘 것</b>에 주목하세요. 출력 길이(4)는 입력 길이(3)와 무관하게 결정됐습니다.</p></div>`;
+    } else if (s.done) {
+      html += `<div class="callout" style="margin-top:14px"><div class="ttl" style="color:var(--hot)">최대 길이 도달 — 강제 종료</div>
+        <p>지금까지의 출력: <b class="mono">${s.seq.join(' ')}</b> — &lt;eos&gt; 가 나오기 전에 안전장치(최대 ${MAX_T}스텝)에 걸렸어요. 실제 시스템에도 이런 max length 가드가 있습니다.</p></div>`;
+    } else {
+      html += `<p class="note" style="margin-top:12px">→ 뽑힌 <b>"${esc(L.word)}"</b> 가 그대로 <b>다음 스텝의 입력</b>이 돼요(자기회귀). 계속 생성!</p>`;
+    }
+    stage.innerHTML = html;
+  }
+
+  document.getElementById('decNext').addEventListener('click', () => {
+    if (!state.done) { state = decodeOnce(state); render(state); }
+  });
+  document.getElementById('decReset').addEventListener('click', () => {
+    state = freshState(); render(state);
+  });
+  state = freshState();
+  render(state);
+})();
+
+// ---------- STEP 3 : BLEU ----------
+(function () {
+  const REF = ['I', 'am', 'a', 'student'];
+  const CANDS = [
+    { name: '좋은 번역', toks: ['I', 'am', 'a', 'student'] },
+    { name: '단어 나열', toks: ['student', 'a', 'am', 'I'] },
+    { name: '짧은 번역', toks: ['I', 'am'] }
+  ];
+
+  const ngrams = (toks, n) =>
+    toks.slice(0, Math.max(0, toks.length - n + 1)).map((_, i) => toks.slice(i, i + n).join(' '));
+  const countMap = (arr) => arr.reduce((m, g) => ({ ...m, [g]: (m[g] || 0) + 1 }), {});
+
+  function bleuCalc(cand) {
+    const c = cand.length, r = REF.length;
+    const rows = [];
+    for (let n = 1; n <= 4; n++) {
+      const cg = ngrams(cand, n);
+      if (!cg.length) { rows.push(null); continue; }
+      const rc = countMap(ngrams(REF, n));
+      const used = {};   // clipped matching: 정답문 등장 횟수만큼만 인정
+      const marks = cg.map(g => {
+        const seen = (used[g] || 0);
+        const ok = seen < (rc[g] || 0);
+        used[g] = seen + 1;
+        return ok;
+      });
+      const hit = marks.filter(Boolean).length;
+      rows.push({ grams: cg, marks, hit, tot: cg.length, p: hit / cg.length });
+    }
+    const usedRows = rows.filter(x => x !== null);
+    const bp = c >= r ? 1 : Math.exp(1 - r / c);
+    const allPos = usedRows.every(x => x.p > 0);
+    const geo = allPos
+      ? Math.exp(usedRows.reduce((s, x) => s + Math.log(x.p), 0) / usedRows.length)
+      : 0;
+    return { rows, bp, geo, bleu: bp * geo, c, r, allPos, nUsed: usedRows.length };
+  }
+
+  const gramChip = (g, ok) =>
+    `<span class="tagchip" style="margin:2px;display:inline-block;${ok
+      ? 'background:rgba(52,211,153,.18);color:var(--good)'
+      : 'background:rgba(251,113,133,.12);color:var(--k);text-decoration:line-through'}">${g}</span>`;
+
+  document.getElementById('bleuRef').innerHTML =
+    `<div class="row">${REF.map(w => chip(w, 'var(--good)')).join('')}</div>`;
+
+  const btns = document.getElementById('bleuBtns');
+  btns.innerHTML = CANDS.map((cd, i) =>
+    `<button data-v="${i}" class="${i === 0 ? 'on' : ''}">${cd.name} "${cd.toks.join(' ')}"</button>`).join('');
+
+  function show(idx) {
+    const cand = CANDS[idx].toks;
+    const B = bleuCalc(cand);
+
+    document.getElementById('bleuCand').innerHTML =
+      `<div class="row">${cand.map(w => chip(w, 'var(--q)')).join('')}` +
+      `<span class="mono" style="font-size:12px;color:var(--muted)">길이 c = ${B.c} (정답 r = ${B.r})</span></div>`;
+
+    document.getElementById('bleuGrams').innerHTML = B.rows.map((row, i) => {
+      const n = i + 1;
+      if (!row) {
+        return `<div class="barrow" style="grid-template-columns:90px 1fr 64px"><div class="bw mono" style="font-size:13px">${n}-gram</div>
+          <div style="color:var(--faint);font-size:13px">문장이 짧아 ${n}-gram이 없어요</div><div class="pct">—</div></div>`;
+      }
+      return `<div class="barrow" style="grid-template-columns:90px 1fr 64px"><div class="bw mono" style="font-size:13px">${n}-gram</div>
+        <div>${row.grams.map((g, k) => gramChip(g, row.marks[k])).join('')}</div>
+        <div class="pct"><b style="color:${row.p > 0 ? 'var(--good)' : 'var(--k)'}">${row.hit}/${row.tot}</b></div></div>`;
+    }).join('') +
+    `<p class="mx-note" style="margin-top:10px">p<sub>n</sub> = (정답문에도 있는 n-gram 수) ÷ (예측문 n-gram 수). 같은 조각이 반복되면 정답문 등장 횟수만큼만 인정해요(clipping).</p>`;
+
+    const bpHtml = B.c >= B.r
+      ? `<div class="formula">c = ${B.c} ≥ r = ${B.r} → <b style="color:var(--good)">BP = 1</b> (벌점 없음)</div>
+         <p class="mx-note" style="margin-top:10px">예측문이 정답문보다 짧지 않으면 벌점이 없어요.</p>`
+      : `<div class="formula">c = ${B.c} &lt; r = ${B.r} → BP = exp(1 − r/c) = exp(1 − ${B.r}/${B.c}) = <b style="color:var(--hot)">${VZ.fmt(B.bp, 3)}</b></div>
+         <p class="mx-note" style="margin-top:10px">precision만 보면 짧은 문장이 유리해요 — "I am"은 두 단어 다 맞으니 p<sub>1</sub>=100%! 하지만 <b>정답의 절반을 빼먹은 번역</b>이죠. 그래서 길이 비율만큼 지수적으로 벌점을 줍니다.</p>`;
+    document.getElementById('bleuBP').innerHTML = bpHtml;
+
+    const geoTxt = B.allPos
+      ? `exp( 평균 log p<sub>n</sub> ) = ${VZ.fmt(B.geo, 3)}${B.nUsed < 4 ? ` <span style="color:var(--muted)">(존재하는 ${B.nUsed}개 n-gram만 평균)</span>` : ''}`
+      : `p<sub>n</sub> = 0 인 항이 있어 기하평균 = <b style="color:var(--k)">0</b>`;
+    document.getElementById('bleuFinal').innerHTML =
+      `<div class="formula">${geoTxt} &nbsp;×&nbsp; BP ${VZ.fmt(B.bp, 3)}</div>` +
+      VZ.barRow('BLEU', B.bleu, { win: B.bleu > 0.8, color: B.bleu > 0.5 ? 'var(--good)' : (B.bleu > 0 ? 'var(--hot)' : 'var(--k)'), pctText: (B.bleu * 100).toFixed(1) + '%' });
+
+    const notes = [
+      '→ 완벽히 일치하면 모든 p<sub>n</sub>=1, BP=1 → <b>BLEU 100%</b>. 실전 번역에서 30~40%만 돼도 꽤 좋은 모델이에요.',
+      '→ 단어는 4개 전부 맞았지만(p<sub>1</sub>=100%) <b>순서가 엉망</b>이라 2-gram부터 전멸 → BLEU 0%. n-gram이 어순을 감시하는 셈이에요.',
+      '→ 1·2-gram precision은 100%인데 BLEU는 36.8%! <b>brevity penalty</b>가 짧은 번역을 벌점 준 거예요. (참고: 3·4-gram이 아예 없는 짧은 문장은 표준 BLEU-4 구현에선 0점 또는 스무딩 처리돼요 — 여기선 BP 효과를 보여주기 위해 존재하는 n-gram까지만 기하평균했습니다.)'
+    ];
+    document.getElementById('bleuNote').innerHTML = notes[idx];
+  }
+
+  btns.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    btns.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    show(+b.dataset.v);
+  });
+  show(0);
+})();
+</script>
+</body>
+</html>
