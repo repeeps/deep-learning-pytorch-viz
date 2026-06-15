@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>00 시작하기 — 왜 딥러닝인가 · 딥러닝, 눈으로 보기</title>
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  .use-card{cursor:pointer; user-select:none;}
+  .use-card .reveal{display:none; margin-top:10px; font-size:13px; color:var(--muted); line-height:1.6;}
+  .use-card.open .reveal{display:block;}
+  .use-card.open{border-color:var(--q);}
+  .use-emoji{font-size:30px; line-height:1;}
+  .sample{display:inline-flex; flex-direction:column; align-items:center; gap:4px; width:84px; padding:10px 6px;
+    border-radius:12px; border:1px solid var(--line); background:var(--panel-2); transition:.2s;}
+  .sample .se{font-size:26px;} .sample .sn{font-size:10px; color:var(--muted); text-align:center; line-height:1.2;}
+  .sample .verdict{font-size:10px; font-family:'JetBrains Mono',monospace; font-weight:700; padding:1px 6px; border-radius:5px;}
+  .sample.correct{border-color:var(--good);} .sample.wrong{border-color:var(--k);}
+  .rulechip{font-family:'JetBrains Mono',monospace; font-size:12px; padding:6px 11px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--line); background:var(--panel-2); color:var(--muted); transition:.2s;}
+  .rulechip.on{border-color:var(--q); color:var(--q); background:rgba(55,189,248,.1);}
+  .maprow{display:flex; align-items:center; gap:10px; padding:10px 0;}
+  .mapnum{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent,var(--q)); font-weight:700; min-width:64px;}
+  .maparrow{text-align:center; color:var(--faint); font-size:16px; margin:-2px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav" id="topnav"></div>
+
+  <header>
+    <div class="tag">START HERE · Chapter 00</div>
+    <h1>왜 딥러닝을 배우나 — 규칙을 짜는 시대의 끝</h1>
+    <p class="intro">코드는 보통 <b>사람이 규칙을 적어</b> 동작해요. 그런데 어떤 문제는 규칙으로 도저히 적을 수가 없습니다. 딥러닝은 <b>규칙을 손으로 쓰는 대신, 예시를 주고 컴퓨터가 스스로 규칙을 찾게</b> 하는 방법이에요. 이 코스에서 무엇을·왜·어떤 순서로 배우는지 먼저 둘러봅시다. (수식 없이!)</p>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-s="0" class="active">00 · 이미 곁에</button>
+    <button data-s="1">01 · 규칙의 한계</button>
+    <button data-s="2">02 · 예시로 배운다</button>
+    <button data-s="3">03 · 코스 지도</button>
+  </nav>
+
+  <!-- STEP 0 -->
+  <section class="panel show" data-panel="0">
+    <span class="kicker" style="color:var(--hot)">Step 00 — It's Already Everywhere</span>
+    <h2>딥러닝은 이미 당신 곁에 있어요</h2>
+    <p class="lead">오늘 하루만 해도 당신은 딥러닝을 여러 번 썼을 거예요. 카드를 눌러 "이것도 딥러닝?"을 확인해 보세요.</p>
+    <div class="grid3" id="useCards"></div>
+    <p class="note" style="margin-top:16px">→ 공통점이 보이나요? 전부 <b>"명확한 규칙으로 적기 어려운"</b> 문제예요. 사람 얼굴, 자연스러운 번역, 취향… 누구도 이걸 <code class="mono">if</code>문으로 다 적을 순 없어요. 그게 바로 딥러닝이 필요한 이유입니다.</p>
+  </section>
+
+  <!-- STEP 1 -->
+  <section class="panel" data-panel="1">
+    <span class="kicker" style="color:var(--q)">Step 01 — Why Rules Fail</span>
+    <h2>"고양이"를 if문으로 정의해 보세요</h2>
+    <p class="lead">고양이 판별기를 <b>규칙으로</b> 만들어 봅시다. 아래 규칙을 켜면, 켠 규칙을 <b>모두 만족</b>해야 "고양이"로 판정해요. 규칙을 늘려가며 8개 샘플을 얼마나 맞히는지 보세요.</p>
+    <div class="row" id="ruleChips" style="gap:8px;margin-bottom:14px"></div>
+    <div class="row" id="sampleRow" style="gap:8px;flex-wrap:wrap;justify-content:center"></div>
+    <div id="ruleVerdict" class="callout" style="margin-top:16px"></div>
+    <p class="note" style="margin-top:12px">→ 규칙을 빡빡하게 하면 <b>검은·자는·접힌 귀 고양이</b>를 놓치고(거짓 음성), 느슨하게 하면 엉뚱한 걸 고양이라 우깁니다(거짓 양성). 특히 <b>여우</b>는 이 속성들이 고양이와 거의 똑같아 <b>어떤 규칙으로도 걸러낼 수가 없어요</b>. 그래서 <b>최선을 다해도 6/8이 한계</b> — 세상의 고양이 변형은 사실상 무한하거든요.<br><span style="color:var(--faint)">※ 참고: 실제 딥러닝은 이렇게 사람이 정한 속성 체크리스트를 쓰지 않아요. 그 반전이 다음 스텝입니다 ▾</span></p>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="panel" data-panel="2">
+    <span class="kicker" style="color:var(--v)">Step 02 — Learn From Examples</span>
+    <h2>규칙을 짜는 대신, 예시를 보여준다</h2>
+    <p class="lead">딥러닝의 발상은 정반대예요. "고양이란 이런 것"이라고 <b>규칙을 적지 않고</b>, 라벨이 붙은 <b>예시(고양이/고양이 아님)를 잔뜩 보여주면</b> 모델이 <b>스스로 구분하는 패턴</b>을 찾아냅니다. 예시가 많을수록 똑똑해져요.</p>
+    <div class="ctrl">
+      <label>학습 예시 수</label>
+      <input type="range" id="dataN" min="5" max="500" step="5" value="20">
+      <span class="val" id="dataNv">20장</span>
+    </div>
+    <div class="barrow" style="margin-top:8px">
+      <div class="bw">정확도</div>
+      <div class="track"><div class="fill" id="accFill" style="background:linear-gradient(90deg,var(--v),#d8b4fe)"></div></div>
+      <div class="pct" id="accPct"></div>
+    </div>
+    <div id="dataDots" style="margin-top:14px;line-height:1.9"></div>
+    <div class="callout v" style="margin-top:14px">
+      <div class="ttl">핵심 전환</div>
+      <p style="margin:0"><b>전통 프로그래밍</b>: 사람이 규칙을 적는다 → 컴퓨터가 따른다. &nbsp;<b>딥러닝</b>: 사람이 예시를 준다 → 컴퓨터가 <b>규칙을 스스로 만든다</b>. 우리가 할 일은 좋은 데이터를 주고, 모델이 잘 배우도록 <b>설계</b>하는 거예요.</p>
+    </div>
+    <p class="note" style="margin-top:12px">→ 슬라이더를 올릴수록 정확도가 오르지만 <b>완벽(100%)엔 못 미쳐요</b>. 딥러닝은 "확실한 규칙"이 아니라 <b>"데이터에서 배운 확률적 패턴"</b>이라는 점, 이게 강점이자 한계예요.</p>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="panel" data-panel="3">
+    <span class="kicker" style="color:var(--good)">Step 03 — Your Learning Map</span>
+    <h2>이 코스에서 배울 것 — 그리고 왜 이 순서인지</h2>
+    <p class="lead">딥러닝은 결국 <b>"숫자를 잘 주무르는 법"</b>이에요. 그래서 숫자 다루기에서 출발해, 학습의 원리 → 신경망 구조 → 언어 처리 → 어텐션 → LLM으로 한 줄기로 이어집니다. 각 단계는 앞 단계 위에 쌓여요.</p>
+    <div id="courseMap"></div>
+    <p class="note" style="margin-top:16px">→ 준비됐다면 <a href="01-tensor.html" style="color:var(--q);font-weight:700">CH 01 · 텐서 다루기</a>부터 시작하세요. 모든 데이터가 숫자 묶음(텐서)이 되는 첫걸음이에요.</p>
+  </section>
+
+  <p class="foot">// 수식 없는 입문 챕터 · 직관 먼저, 계산은 다음 챕터부터 · <a href="index.html">목차</a></p>
+</div>
+
+<script src="shared/lib.js"></script>
+<script>
+VZ.mountTopnav('#topnav', '00 · Intro');
+VZ.setupStepper();
+
+// ---------- STEP 0 : 일상 카드 ----------
+(function(){
+  const USES = [
+    ['🔓','폰 얼굴 인식','당신 얼굴을 수천 장 본 신경망이, 각도·조명·안경이 달라도 "당신"을 알아봐요.'],
+    ['🗣️','음성 비서 / 받아쓰기','소리 파형을 글자로. 사투리·잡음 속에서도 단어를 알아듣는 건 규칙으론 불가능해요.'],
+    ['🌐','번역 / ChatGPT','문장의 의미와 문맥을 학습해 자연스럽게 옮기고 답해요. 이 코스의 종착지(트랜스포머·LLM)죠.'],
+    ['🎬','추천 (유튜브·넷플릭스)','당신과 비슷한 사람들의 시청 패턴을 학습해 "다음에 볼 것"을 예측해요.'],
+    ['🚗','자율주행','카메라 영상에서 차·사람·차선을 실시간 인식. CNN(합성곱 신경망)의 대표 무대예요.'],
+    ['🩺','의료 영상 판독','X-ray·MRI에서 사람이 놓치기 쉬운 미세한 패턴을 찾아 의사를 도와요.'],
+  ];
+  document.getElementById('useCards').innerHTML = USES.map((u,i)=>
+    `<div class="card use-card" data-i="${i}">
+       <div class="use-emoji">${u[0]}</div>
+       <h4 style="margin:8px 0 0">${u[1]}</h4>
+       <div class="reveal">${u[2]}</div>
+       <div class="note" style="margin-top:8px;font-size:11px;color:var(--faint)">클릭해서 보기 ▾</div>
+     </div>`).join('');
+  document.getElementById('useCards').addEventListener('click', e=>{
+    const c=e.target.closest('.use-card'); if(!c) return; c.classList.toggle('open');
+  });
+})();
+
+// ---------- STEP 1 : 규칙의 한계 ----------
+(function(){
+  // 샘플: 속성 {ears2, brown, tri(삼각귀), front(정면)}  cat=정답
+  const SAMPLES = [
+    {e:'🐱', n:'정면 고양이', cat:true,  ears2:true, brown:true,  tri:true,  front:true},
+    {e:'🐈‍⬛', n:'검은 고양이', cat:true,  ears2:true, brown:false, tri:true,  front:true},
+    {e:'😼', n:'옆 본 고양이', cat:true,  ears2:true, brown:true,  tri:true,  front:false},
+    {e:'🐈', n:'자는 고양이', cat:true,  ears2:true, brown:false, tri:true,  front:false},
+    {e:'🐱', n:'접힌 귀 고양이', cat:true,  ears2:true, brown:true,  tri:false, front:true},
+    {e:'🦊', n:'여우',       cat:false, ears2:true, brown:true,  tri:true,  front:true},
+    {e:'🐶', n:'강아지',     cat:false, ears2:true, brown:true,  tri:false, front:true},
+    {e:'🐰', n:'토끼',       cat:false, ears2:true, brown:true,  tri:false, front:true},
+  ];
+  const RULES = [
+    {id:'ears2', label:'귀가 2개'},
+    {id:'brown', label:'갈색이다'},
+    {id:'tri',   label:'삼각형 귀'},
+    {id:'front', label:'정면을 본다'},
+  ];
+  const on = {};
+  const chips = document.getElementById('ruleChips');
+  chips.innerHTML = RULES.map(r=>`<span class="rulechip" data-id="${r.id}">+ ${r.label}</span>`).join('');
+  function judge(s){ return RULES.every(r=> !on[r.id] || s[r.id]); }  // 켠 규칙 모두 만족해야 고양이 판정
+  function render(){
+    let correct=0;
+    document.getElementById('sampleRow').innerHTML = SAMPLES.map(s=>{
+      const pred = judge(s);            // true=고양이로 판정
+      const ok = (pred === s.cat);
+      if(ok) correct++;
+      const vcol = pred? 'var(--good)':'var(--k)';
+      return `<div class="sample ${ok?'correct':'wrong'}">
+        <div class="se">${s.e}</div><div class="sn">${s.n}</div>
+        <div class="verdict" style="background:${pred?'rgba(52,211,153,.15)':'rgba(251,113,133,.15)'};color:${vcol}">${pred?'고양이':'아님'}</div>
+        <div style="font-size:12px">${ok?'✓':'✗'}</div>
+      </div>`;
+    }).join('');
+    // 지금 켠 규칙이 무엇을 왜 틀렸는지 동적으로 짚어준다
+    const anyRule = Object.values(on).some(Boolean);
+    const missed = SAMPLES.filter(s=>s.cat && !judge(s)).map(s=>s.n);   // 놓친 진짜 고양이
+    const falsePos = SAMPLES.filter(s=>!s.cat && judge(s)).map(s=>s.n); // 고양이로 오인한 것
+    let msg;
+    if(!anyRule){
+      msg = '규칙을 하나도 안 켜면 전부 "고양이"로 판정 — 여우·강아지·토끼까지 고양이라네요. 규칙을 켜 보세요.';
+    } else {
+      const parts = [];
+      if(missed.length) parts.push(`<b style="color:var(--k)">놓친 진짜 고양이</b>: ${missed.join(', ')} <span style="color:var(--faint)">(규칙이 너무 빡빡 — 거짓 음성)</span>`);
+      if(falsePos.length) parts.push(`<b style="color:var(--k)">고양이로 오인</b>: ${falsePos.join(', ')} <span style="color:var(--faint)">(규칙이 너무 느슨 — 거짓 양성)</span>`);
+      if(!parts.length) parts.push('이 8개는 맞췄지만, 새로운 고양이 사진엔 또 깨져요.');
+      msg = parts.join('<br>');
+    }
+    document.getElementById('ruleVerdict').innerHTML =
+      `<div class="ttl" style="color:${correct===8?'var(--good)':'var(--hot)'}">정확도 ${correct}/8 <span style="font-size:12px;color:var(--faint)">(최선을 다해도 6/8이 한계예요)</span></div>
+       <p style="margin:0">${msg}</p>`;
+  }
+  chips.addEventListener('click', e=>{
+    const c=e.target.closest('.rulechip'); if(!c) return;
+    const id=c.dataset.id; on[id]=!on[id]; c.classList.toggle('on', on[id]);
+    render();
+  });
+  render();
+})();
+
+// ---------- STEP 2 : 예시로 배운다 ----------
+(function(){
+  const slider = document.getElementById('dataN');
+  function render(){
+    const n = +slider.value;
+    document.getElementById('dataNv').textContent = n + '장';
+    // 가상의 학습곡선: 예시 많을수록 정확도↑ (포화 ~97%)
+    const acc = 0.5 + 0.47*(1 - Math.exp(-n/110));
+    document.getElementById('accFill').style.width = (acc*100).toFixed(0)+'%';
+    document.getElementById('accPct').textContent = (acc*100).toFixed(0)+'%';
+    // 예시 점 (고양이/아님 라벨 더미) — 약 2:1로 두 라벨이 항상 함께 보이게
+    const dots = Math.min(66, Math.round(n/7)+6);
+    let s='';
+    for(let i=0;i<dots;i++) s += (i%3===2 ? '🐶' : '🐱');   // 1/3은 '고양이 아님'(개) — 늘 등장
+    document.getElementById('dataDots').innerHTML =
+      `<span style="font-size:13px">${s}</span><br><span class="note">🐱 고양이 / 🐶 고양이 아님 — 라벨 붙은 예시 ${n}장 중 일부</span>`;
+  }
+  slider.addEventListener('input', render);
+  render();
+})();
+
+// ---------- STEP 3 : 코스 지도 ----------
+(function(){
+  const MAP = [
+    ['CH 01~05','파이토치·ML 기초','모든 데이터는 숫자 묶음(텐서). 거기서 출발해 직선 맞추기(회귀)→분류→신경망·역전파→잘 학습시키기까지 — "데이터에서 패턴 찾기"의 엔진.','01-tensor.html','var(--hot)'],
+    ['CH 06~07','신경망 구조','순서가 있는 데이터는 RNN, 이미지는 CNN. 문제 모양에 맞춘 구조.','06-rnn.html','var(--q)'],
+    ['CH 08~11','NLP 기초','글을 숫자로(전처리·임베딩), 단어의 의미와 유사도.','08-preprocessing.html','var(--v)'],
+    ['CH 12~14','NLP 응용','감성분석·품사 태깅·서브워드 토크나이저 같은 실전 과제.','12-textclassification.html','var(--blue)'],
+    ['CH 15~17','어텐션 · 트랜스포머','"어디에 집중할지" 고르는 어텐션 → 오늘날 LLM의 심장 트랜스포머.','16-attention.html','var(--k)'],
+    ['CH 18~19','LLM 시대','BERT·GPT 같은 사전훈련 모델, 그리고 LoRA·RAG 같은 실전 활용.','18-pretrained.html','var(--good)'],
+  ];
+  document.getElementById('courseMap').innerHTML = MAP.map((m,i)=>
+    `${i>0?'<div class="maparrow">↓</div>':''}
+     <a class="maprow" href="${m[3]}" style="text-decoration:none;--accent:${m[4]}">
+       <span class="mapnum">${m[0]}</span>
+       <span style="flex:1">
+         <b style="color:var(--ink)">${m[1]}</b>
+         <div class="note" style="margin-top:2px">${m[2]}</div>
+       </span>
+       <span style="color:${m[4]};font-size:18px">→</span>
+     </a>`).join('');
+})();
+</script>
+</body>
+</html>
