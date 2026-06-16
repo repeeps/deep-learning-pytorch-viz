@@ -355,6 +355,10 @@ b.h{color:var(--hot);}
       <div class="card"><span class="tagchip k">Key</span><h4>"내가 가진 것"</h4><p class="note">각 단어가 들고 있는 <b>명함/꼬리표</b>. 질문과 맞춰보는 대상.</p></div>
       <div class="card"><span class="tagchip v">Value</span><h4>"내가 줄 정보"</h4><p class="note">매칭되면 실제로 <b>전달되는 내용물</b>.</p></div>
     </div>
+    <div class="callout" style="margin-top:14px">
+      <div class="ttl">왜 굳이 단어 하나를 셋으로 쪼갤까?</div>
+      <p style="margin:0">같은 단어라도 <b>역할이 달라서</b>예요. 내가 <b>물어볼 때</b>(Query) 쓰는 정보와, 남이 나를 <b>찾을 때</b> 내미는 정보(Key), 막상 <b>건네줄</b> 알맹이(Value)가 서로 다르거든요. 임베딩 하나를 그냥 내적하면 이 세 역할이 뒤섞여요. 그래서 W<sub>Q</sub>·W<sub>K</sub>·W<sub>V</sub> 세 행렬로 <b>같은 단어를 세 가지 모습</b>으로 변신시켜, "질문↔명함"은 Key끼리, "전달"은 Value로 따로 쓰는 거예요.</p>
+    </div>
 
     <div class="view-toggle" id="mmViewToggle" style="margin-top:18px">
       <button data-v="single" class="on">🧩 한 단어 (배) 자세히</button>
@@ -382,6 +386,7 @@ b.h{color:var(--hot);}
       <b class="h">배의 Q</b> 와 각 단어의 <b style="color:var(--k)">K</b> 를 내적(dot product)하면 "얼마나 관련 있나" 점수가 나옵니다.
       → √d 로 나눠 안정화(scale) → <b class="h">Softmax</b> 로 합이 1인 확률(비중)로 변환.
     </p>
+    <p class="note" style="margin-top:-6px;color:var(--faint)">왜 <b>√d</b>로 나눌까(d = 벡터 차원): 차원이 크면 내적 점수가 너무 커지고, 큰 점수를 Softmax에 넣으면 <b>한 단어에 비중이 99%+로 쏠려</b> 나머지를 거의 못 보게 돼요(그러면 학습이 막혀요). √d로 나눠 점수 크기를 적당히 눌러, 비중이 골고루 퍼지게 만드는 안전장치예요. (지금 데모는 d=3이라 효과가 작지만, 실제 d=64·512에선 필수예요.)</p>
 
     <div class="sm-box">
       <div class="sm-q">❓ Softmax 가 뭐예요?</div>

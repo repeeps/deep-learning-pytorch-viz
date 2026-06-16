@@ -72,7 +72,8 @@
     <div class="pipe" id="pipeFlow"></div>
     <div class="callout q">
       <div class="ttl">앞 챕터들과의 연결</div>
-      <p><b>토큰화·정수 인코딩</b>은 9장(전처리)에서 배운 그대로예요. <b>임베딩</b>은 12장(Word2Vec)처럼 단어를 의미 벡터로 바꾼 결과이고, 가운데 <b>RNN 셀</b>은 7장의 h<sub>t</sub> = tanh(W<sub>x</sub>x<sub>t</sub> + W<sub>h</sub>h<sub>t-1</sub> + b) 그 셀입니다. 마지막 스텝에선 8장의 <b>합성곱</b>을 문장에 적용해 봐요.</p>
+      <p><b>토큰화·정수 인코딩</b>은 8장(전처리)에서 배운 그대로예요. <b>임베딩</b>은 11장(Word2Vec)처럼 단어를 의미 벡터로 바꾼 결과이고, 가운데 <b>RNN 셀</b>은 6장의 h<sub>t</sub> = tanh(W<sub>x</sub>x<sub>t</sub> + W<sub>h</sub>h<sub>t-1</sub> + b) 그 셀입니다. 마지막 스텝에선 7장의 <b>합성곱</b>을 문장에 적용해 봐요.</p>
+      <p style="font-size:13px;color:var(--faint);margin:6px 0 0">⚠️ RNN 셀(tanh 갱신)이 처음이거나 가물거리면 <b>6장 RNN</b>을 먼저 보고 오면 훨씬 수월해요 — 이 장은 그 위에 쌓아요.</p>
       <p>새로 등장하는 건 끝의 <b>FC + 시그모이드</b> 한 줄뿐 — 시퀀스 요약 벡터를 <b>확률 1개</b>로 바꾸는 부분이에요.</p>
     </div>
     <p class="note">→ 핵심 관찰: 길이 5짜리 문장이 <code class="mono">[5] → [5×3] → [2] → [1]</code> 로 점점 <b>압축</b>돼요. RNN의 마지막 h 가 "문장 전체 요약"이라는 게 이 구조의 전부입니다.</p>
@@ -82,11 +83,11 @@
   <section class="panel" data-panel="1">
     <span class="kicker" style="color:var(--q)">Step 01 — Reading Word by Word</span>
     <h2>RNN이 한 단어씩 읽으며 기억을 갱신한다</h2>
-    <p class="lead">리뷰 <b>"이 영화 정말 재미 있다"</b> (5토큰)를 넣어 봅시다. 각 단어는 3차원 임베딩이고, 은닉 상태 h 는 2차원·시작값 <b>[0, 0]</b>. <b>▶ 다음 단어</b>를 누를 때마다 7장과 똑같은 tanh 갱신식이 한 번 돕니다.</p>
+    <p class="lead">리뷰 <b>"이 영화 정말 재미 있다"</b> (5토큰)를 넣어 봅시다. 각 단어는 3차원 임베딩이고, 은닉 상태 h 는 2차원·시작값 <b>[0, 0]</b>. <b>▶ 다음 단어</b>를 누를 때마다 6장과 똑같은 tanh 갱신식이 한 번 돕니다.</p>
 
     <div class="callout v" style="margin-bottom:18px">
       <div class="ttl">하드코딩된 임베딩 · 가중치 (학습 완료를 가정)</div>
-      <p style="font-size:13px">보기 쉽도록 <b>h<sub>0</sub> = 감성 축</b>, h<sub>1</sub> = 그 외 정보가 되게 값을 골라뒀어요. 실제로는 이 모든 숫자를 역전파가 학습합니다.</p>
+      <p style="font-size:13px">보기 쉽도록 <b>h<sub>0</sub> = 감성 축</b>, h<sub>1</sub> = 그 외 정보가 되게 값을 골라뒀어요. 실제로는 이 모든 숫자를 역전파가 학습합니다. <b>그러니 숫자 자체를 외우려 하지 마세요</b> — "곱 → tanh → 다음 h 로 기억이 갱신된다"는 <b>구조</b>만 보면 충분해요.</p>
       <p class="mono" style="color:var(--ink);font-size:12.5px;margin:0">
         W<sub>x</sub> = [[1.2, 0.0, 0.2],[0.0, 0.8, -0.3]] &nbsp;·&nbsp; W<sub>h</sub> = [[0.6, 0.1],[0.0, 0.5]] &nbsp;·&nbsp; b = [0, 0]
       </p>
@@ -138,7 +139,7 @@
   <section class="panel" data-panel="3">
     <span class="kicker" style="color:var(--good)">Step 03 — 1D CNN over Text</span>
     <h2>커널이 바이그램(연속 2단어)을 훑는다</h2>
-    <p class="lead">같은 임베딩 행렬 <b>[5×3]</b> 위로 <b>크기 2짜리 커널 [2×3]</b> 을 세로로 미끄러뜨리면, 8장의 합성곱과 똑같이 <b>겹친 6쌍을 곱해 더한 숫자 하나</b>가 나와요. 윈도우가 연속한 두 단어를 덮으니, 커널은 곧 <b>n-gram 패턴 검출기</b>입니다.</p>
+    <p class="lead">같은 임베딩 행렬 <b>[5×3]</b> 위로 <b>크기 2짜리 커널 [2×3]</b> 을 세로로 미끄러뜨리면, 7장의 합성곱과 똑같이 <b>겹친 6쌍을 곱해 더한 숫자 하나</b>가 나와요. 윈도우가 연속한 두 단어를 덮으니, 커널은 곧 <b>n-gram 패턴 검출기</b>입니다.</p>
 
     <div class="view-toggle" id="kernBtns"></div>
 
@@ -171,7 +172,7 @@
     <div class="sub">max-over-time pooling — 가장 강한 신호 하나만</div>
     <div id="cnnPool"></div>
 
-    <p class="note" style="margin-top:14px">→ 문장 어디에 있든 <b>"정말+재미" 같은 강한 바이그램</b>이 한 번이라도 등장하면 max 값이 커져요. 위치는 버리고 "패턴이 있었나"만 남기는 것 — 이게 텍스트 CNN(max-over-time pooling)의 직관이고, 8장에서 본 맥스 풀링의 1차원 버전입니다. 검출기를 <b>부정 바이그램</b>으로 바꿔 보세요. 긍정 문장에선 조용하죠. 실제 모델은 이런 커널 수백 개의 max 값들을 모아 FC 로 분류해요.</p>
+    <p class="note" style="margin-top:14px">→ 문장 어디에 있든 <b>"정말+재미" 같은 강한 바이그램</b>이 한 번이라도 등장하면 max 값이 커져요. 위치는 버리고 "패턴이 있었나"만 남기는 것 — 이게 텍스트 CNN(max-over-time pooling)의 직관이고, 7장에서 본 맥스 풀링의 1차원 버전입니다. 검출기를 <b>부정 바이그램</b>으로 바꿔 보세요. 긍정 문장에선 조용하죠. 실제 모델은 이런 커널 수백 개의 max 값들을 모아 FC 로 분류해요.</p>
   </section>
 
   <p class="foot">// 모든 값은 브라우저에서 실제 계산. 임베딩·가중치는 "학습 완료"를 가정한 예시값. 교육용 단순화. · <a href="index.html">목차</a></p>

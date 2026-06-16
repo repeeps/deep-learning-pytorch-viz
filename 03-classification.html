@@ -71,6 +71,7 @@
     <h2>왜 MSE 대신 크로스엔트로피(BCE)인가</h2>
     <p class="lead">분류에서는 손실로 <b>이진 크로스엔트로피(BCE)</b> 를 써요. 정답을 <b>확신을 갖고 틀리면 벌점이 폭발</b>하도록 설계된 함수입니다. MSE는 아무리 크게 틀려도 벌점이 최대 1에서 멈춰서, 시그모이드와 만나면 학습 신호가 약해져요.</p>
     <div class="formula">BCE = −[ y·log p + (1−y)·log(1−p) ]</div>
+    <p class="note" style="margin-top:6px;color:var(--faint)">기호가 어렵게 보여도 괜찮아요. <code class="mono">log</code>는 "0에 가까워질수록 −∞로 곤두박질치는 함수"라고만 알면 충분해요 — 그래서 <b>확신했는데 틀릴수록</b>(맞을 확률 p가 0에 가까울수록) 벌점 −log p 가 폭발해요. 식을 외울 필요 없이, 아래 곡선이 말하는 결론만 보면 됩니다.</p>
     <div class="view-toggle" id="s2yToggle" style="margin-top:16px">
       <button data-y="1" class="on">정답 y = 1 (합격)</button>
       <button data-y="0">정답 y = 0 (불합격)</button>

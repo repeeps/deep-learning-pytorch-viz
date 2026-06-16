@@ -56,6 +56,7 @@
     <span class="kicker" style="color:var(--q)">Step 01 — Forward Pass</span>
     <h2>입력 → 은닉 → 출력으로 값이 흐른다</h2>
     <p class="lead"><code class="mono">2-2-1</code> 망에서 값은 왼쪽에서 오른쪽으로 흘러요. <b>행렬곱</b>으로 한 층을 한 번에 계산하고, 사이마다 <b>활성화</b>를 끼웁니다.</p>
+    <p class="note" style="margin-top:-2px;color:var(--faint)">행렬 <b>W₁</b>이 낯설어도 겁먹지 마세요 — 그냥 "은닉 뉴런 2개의 가중합을 <b>한꺼번에</b> 계산하려고 가중치를 묶어둔 표"예요. 행 = 입력, 열 = 은닉 뉴런. 뉴런 하나하나 따로 곱하던 걸 두 개분 동시에 한 게 행렬곱이에요.</p>
 
     <div class="chart-wrap">
       <div class="label">네트워크 — 입력(파랑) → 은닉(보라) → 출력(초록)</div>
@@ -92,6 +93,7 @@
       <div class="ttl" style="color:var(--k)">기호 δ(델타) 한 줄 정의</div>
       <p style="margin:0"><b>δ = 그 뉴런의 입력값 z가 최종 손실에 미치는 영향(∂L/∂z)</b> = "이 뉴런이 오차에 진 책임". 출력층 δ를 먼저 구하고, 그걸 뒤로 곱해 가며 은닉층 δ를 얻어요(연쇄법칙). 가중치 기울기는 <code class="mono">δ × 그 가중치의 입력</code> 으로 나옵니다.</p>
     </div>
+    <p class="note" style="margin-top:10px;color:var(--faint)">아래 표에 나오는 <code class="mono">σ'(z)=a(1−a)</code>는 시그모이드를 미분한 값이에요. 지금은 <b>유도를 외울 필요 없이</b> "연쇄법칙이 한 단계 거꾸로 갈 때마다 이 값을 곱한다"만 보면 돼요. 미분이 가물거려도 괜찮아요 — 실제로는 파이토치가 이 전부를 자동으로 해줘요(2장 autograd처럼). 핵심은 "오차의 책임이 뒤로 흐른다"는 그림.</p>
     <div class="label" style="margin-top:14px">손실 & 출력층 오차 신호</div>
     <div id="bwdHead"></div>
     <div class="label" style="margin-top:14px">각 가중치의 기울기 ∂L/∂w (연쇄법칙 분해)</div>

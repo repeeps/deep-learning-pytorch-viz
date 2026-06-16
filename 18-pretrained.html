@@ -163,6 +163,7 @@
     <span class="kicker" style="color:var(--v)">Step 03 — Fine-tuning</span>
     <h2>같은 몸통, 다른 머리 — 작업마다 헤드만 갈아 끼운다</h2>
     <p class="lead">파인튜닝은 사전훈련된 BERT 몸통 위에 <b>작은 분류 헤드 하나</b>를 얹고, 내 라벨 데이터로 살짝 더 학습하는 것. 문장 전체의 요약 벡터인 <b>[CLS]</b> 토큰 출력이 헤드의 입력이 됩니다.</p>
+    <p class="note" style="margin-top:-2px;color:var(--faint)"><b>[CLS]</b>는 BERT가 입력 <b>맨 앞에 항상 붙이는 특수 토큰</b>이에요(classification의 약자). 어텐션을 거치며 문장 전체 정보가 이 자리에 모이도록 학습돼서, "문장 한 줄 요약 벡터"로 쓰여요. 그래서 분류할 땐 이 [CLS] 출력 하나만 꺼내 헤드에 넣어요.</p>
 
     <div class="view-toggle" id="ftToggle">
       <button data-v="tune" class="on">전체 미세조정 (fine-tune)</button>

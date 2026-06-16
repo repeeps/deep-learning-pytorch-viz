@@ -45,6 +45,7 @@
       <div class="ttl">공식</div>
       <div class="formula">TF-IDF(t, d) = TF(t, d) × IDF(t),&nbsp;&nbsp; IDF(t) = log( N / df(t) )</div>
       <p style="margin-top:10px"><code>N</code> = 전체 문서 수, <code>df(t)</code> = 단어 t가 등장한 문서 수. 모든 문서에 나오면 <code>df=N</code> → <code>IDF=log(1)=0</code> → 가중치가 0이 돼요. (여기서 log는 <b>자연로그 ln</b> — 예: log(3/1)=1.099)</p>
+      <p style="margin-top:6px;color:var(--faint);font-size:13px">왜 그냥 N/df 가 아니라 <b>log</b>를 씌울까: 흔한 정도에 따라 가중치를 <b>너무 급격히 깎지 않으려고</b>요. 로그는 큰 수를 부드럽게 눌러줘서, 한두 문서 차이로 점수가 폭주하는 걸 막아요.</p>
     </div>
     <div class="label">단어별 df / IDF (실제 계산)</div>
     <div style="overflow-x:auto"><table class="calc" id="idfTable"></table></div>

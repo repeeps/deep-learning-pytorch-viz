@@ -73,7 +73,8 @@
   <section class="panel" data-panel="2">
     <span class="kicker" style="color:var(--v)">Step 02 — LSTM Gates</span>
     <h2>게이트 3개로 기억(cell state)을 조절</h2>
-    <p class="lead">LSTM 은 별도의 <b>셀 상태 C</b> 를 두고, 0~1 사이의 <b>게이트</b>로 "얼마나 버리고 / 받아들이고 / 내보낼지"를 정해요. 게이트를 직접 움직여 C 가 어떻게 바뀌는지 보세요. (이전 기억 C<sub>t-1</sub> = <b>2.0</b>, 새 후보 C̃<sub>t</sub> = <b>1.0</b> 로 고정)</p>
+    <p class="lead">LSTM 은 별도의 <b>셀 상태 C</b>(장기 기억)를 두고, 0~1 사이의 <b>게이트</b>로 "얼마나 버리고 / 받아들이고 / 내보낼지"를 정해요. 게이트를 직접 움직여 C 가 어떻게 바뀌는지 보세요.</p>
+    <p class="note" style="margin-top:-2px;color:var(--faint)"><b>C̃<sub>t</sub>(새 후보)</b> = 지금 들어온 입력에서 만든 "이번에 새로 적어둘 만한 정보"예요(실제론 tanh가 만들지만 여기선 <b>1.0으로 고정</b>). <b>C<sub>t-1</sub></b>는 직전까지의 기억으로 <b>2.0 고정</b>. 게이트만 움직여 보세요.</p>
 
     <div class="grid3" style="margin-bottom:6px">
       <div class="card">

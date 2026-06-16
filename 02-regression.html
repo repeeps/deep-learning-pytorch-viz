@@ -71,7 +71,7 @@
   <section class="panel" data-panel="2">
     <span class="kicker" style="color:var(--v)">Step 02 — Gradient Descent</span>
     <h2>손실이 줄어드는 쪽으로 조금씩 굴리기</h2>
-    <p class="lead">손실을 가장 빨리 줄이는 방향이 <b>기울기(gradient)</b> 의 반대 방향이에요. 그래서 <code class="mono">w ← w − lr·dW</code>, <code class="mono">b ← b − lr·dB</code> 로 한 발씩 내려갑니다. <b>lr(학습률)</b> 은 보폭이에요. 직접 슬라이더로 움직여 보거나, <b>학습 시작</b>으로 자동 하강을 구경하세요.</p>
+    <p class="lead">손실 그래프를 <b>골짜기</b>라 생각해요. 공을 비탈에 놓으면 가장 가파른 쪽으로 굴러내려가 바닥(손실 최소)에 닿죠. 그 "가장 가파른 방향"이 <b>기울기(gradient)</b>이고, 우리는 그 <b>반대(내리막) 방향</b>으로 한 발씩 내려가요. 그래서 <code class="mono">w ← w − lr·dW</code>, <code class="mono">b ← b − lr·dB</code> 입니다. <b>lr(학습률)</b> 은 보폭이에요. 슬라이더로 움직여 보거나 <b>학습 시작</b>으로 자동 하강을 구경하세요.</p>
     <div class="ctrl">
       <label>기울기 w</label>
       <input type="range" id="s2w" min="-1" max="5" step="0.05" value="0">

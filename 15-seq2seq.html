@@ -35,8 +35,8 @@
       <p><b>디코더</b>는 그 벡터에서 출발해 <code>&lt;eos&gt;</code>(문장 끝)가 나올 때까지 단어를 계속 뽑아요. 몇 개를 뽑을지는 디코더가 스스로 정하니 출력 길이도 자유롭습니다.</p>
     </div>
     <div class="callout good">
-      <div class="ttl">예고 — 이 구조의 약점과 17장</div>
-      <p>문장 전체를 <b>벡터 하나</b>에 욱여넣으니, 문장이 길어지면 앞쪽 정보가 희미해져요(병목). 다음 장 <b>17장 어텐션</b>이 바로 이 병목을 푸는 개선판입니다.</p>
+      <div class="ttl">예고 — 이 구조의 약점과 16장</div>
+      <p>문장 전체를 <b>벡터 하나</b>에 욱여넣으니, 문장이 길어지면 앞쪽 정보가 희미해져요(병목). 다음 장 <b>16장 어텐션</b>이 바로 이 병목을 푸는 개선판입니다.</p>
     </div>
   </section>
 
@@ -240,7 +240,7 @@ const CTX = ENC_TRACE[ENC_TRACE.length - 1].h;   // 컨텍스트 벡터
     if (done) {
       html += `<div class="callout good" style="margin-top:18px">
         <div class="ttl">컨텍스트 벡터 완성!</div>
-        <p>마지막 h<sub>3</sub> = <b class="mono">[${CTX.map(x => VZ.fmt(x, 3)).join(', ')}]</b> 가 문장 "나는 학생 이다" 전체의 요약 — <b>컨텍스트 벡터</b>예요. 디코더는 이 숫자 2개만 들고 번역을 시작합니다. (이 "전부를 벡터 하나에" 가 17장에서 다룰 병목!)</p>
+        <p>마지막 h<sub>3</sub> = <b class="mono">[${CTX.map(x => VZ.fmt(x, 3)).join(', ')}]</b> 가 문장 "나는 학생 이다" 전체의 요약 — <b>컨텍스트 벡터</b>예요. 디코더는 이 숫자 2개만 들고 번역을 시작합니다. (이 "전부를 벡터 하나에" 가 16장에서 다룰 병목!)</p>
       </div>`;
     } else if (t > 0) {
       html += `<p class="note" style="margin-top:12px">→ h 가 이전 기억과 새 단어를 섞으며 갱신됐어요. 계속 <b>▶ 다음</b>!</p>`;

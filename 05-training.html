@@ -63,6 +63,7 @@
         <h4 style="color:var(--good)">Adam <span class="tagchip" style="background:rgba(52,211,153,.15);color:var(--good)">lr=0.2</span></h4>
         <div class="formula" style="font-size:12px">m←β₁m+(1−β₁)g<br>v←β₂v+(1−β₂)g²<br>x ← x − lr·m̂/(√v̂+ε)</div>
         <p class="note" style="margin:8px 0 0">g²의 이동평균의 <b>제곱근</b>(√v̂)으로 나눠 보폭을 정규화 — 어디서나 보폭 ≈ lr로 꾸준히.</p>
+        <p class="note" style="margin:6px 0 0;color:var(--faint);font-size:11.5px">β·m̂·ε 같은 기호는 <b>몰라도 돼요</b>. 핵심은 한 줄: "<b>√로 나눠 보폭을 고르게</b> 만든다". 그림(아래 경로)이 말하는 결론만 보세요.</p>
       </div>
     </div>
     <div class="ctrl" style="margin-top:16px">
@@ -79,7 +80,8 @@
   <section class="panel" data-panel="2">
     <span class="kicker" style="color:var(--v)">Step 02 — Overfitting</span>
     <h2>과적합 — train만 잘 맞추는 모델</h2>
-    <p class="lead">사인 곡선에서 뽑은 <b style="color:var(--q)">train 점 10개</b>에 다항식을 최소제곱(정규방정식)으로 피팅해요. 차수를 올리면 train 오차는 <b>계속 줄지만</b>, 학습에 안 쓴 <b style="color:var(--k)">test 점 5개</b>의 오차는 어느 순간부터 <b>다시 치솟습니다</b>. 그게 과적합이에요.</p>
+    <p class="lead">사인 곡선에서 뽑은 <b style="color:var(--q)">train 점 10개</b>에 다항식을 맞춰(피팅)요. 차수를 올리면 train 오차는 <b>계속 줄지만</b>, 학습에 안 쓴 <b style="color:var(--k)">test 점 5개</b>의 오차는 어느 순간부터 <b>다시 치솟습니다</b>. 그게 과적합이에요.</p>
+    <p class="note" style="margin-top:-2px;color:var(--faint)">여기선 곡선을 "최소제곱(정규방정식)"이라는 공식으로 <b>한 번에</b> 맞춰요. 2장의 경사하강과 방법만 다를 뿐, 하는 일은 똑같이 "점들에 곡선 맞추기"예요 — 용어는 신경 쓰지 말고 <b>차수 슬라이더만</b> 움직여 보세요.</p>
     <div class="ctrl">
       <label>다항식 차수 d</label>
       <input type="range" id="s2deg" min="1" max="9" step="1" value="1">

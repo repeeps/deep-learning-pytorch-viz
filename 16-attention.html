@@ -56,6 +56,7 @@
     <span class="kicker" style="color:var(--v)">Step 02 — Score → Softmax → Context</span>
     <h2>실제 숫자로 한 스텝을 분해</h2>
     <p class="lead">디코더가 <b id="dstateLabel"></b> 를 낼 차례입니다. 디코더 상태 <code class="mono">s</code> 와 각 인코더 hidden <code class="mono">h<sub>i</sub></code> 의 <b>내적(dot-product)</b>으로 점수를 매기고, <code>softmax</code>로 가중치를, 가중합으로 컨텍스트를 만들어요.</p>
+    <p class="note" style="margin-top:-2px;color:var(--faint)"><code class="mono">s</code>는 <b>15장에서 본 디코더의 hidden 상태</b>예요 — "디코더가 지금 무엇을 번역하려 하는가"를 담은 벡터죠. 그 질문(s)을 인코더의 단어 기억들(h<sub>i</sub>)에 대보며 "어디를 볼지" 고르는 거예요. (내적이 클수록 = 방향이 비슷할수록 관련 높음.)</p>
 
     <div class="grid3" style="grid-template-columns:1fr">
       <div class="card">

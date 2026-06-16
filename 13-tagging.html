@@ -56,6 +56,7 @@
     <span class="kicker" style="color:var(--v)">Step 02 — Bidirectional RNN</span>
     <h2>'배'를 앞뒤에서 협공하기</h2>
     <p class="lead">정방향(→)은 <b>과거 문맥</b>만, 역방향(←)은 <b>미래 문맥</b>만 봐요. 두 방향의 hidden을 <b>이어붙이면(concat)</b> '배를' 시점에서도 뒤의 "타고"가 보입니다. 토글로 비교해 보세요.</p>
+    <p class="note" style="margin-top:-2px;color:var(--faint)">왜 더하지 않고 <b>나란히 붙일까</b>(concat)? 더하면 두 방향 정보가 <b>섞여</b> 구분이 안 돼요. 그냥 <code class="mono">[정방향 2개 | 역방향 2개]</code>로 이어붙이면 둘 다 <b>온전히 보존</b>돼, 다음 분류기가 양쪽을 따로 참고할 수 있어요. (기호 <code class="mono">⊕</code> 는 "이어붙이기"라는 뜻으로 썼어요.)</p>
 
     <div class="callout v" style="margin-bottom:18px">
       <div class="ttl">정직 고지 — 작지만 진짜 계산</div>
