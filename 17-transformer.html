@@ -677,8 +677,8 @@ renderMM();
 // step2 점수표 + softmax 시각화
 const fw = tokens.find(t=>t.focus).w;          // 초점 단어 "배"
 const maxW=Math.max(...weights);
-const dispExp = scaled.map(s=>Math.exp(s));     // 표시용 e^x (정규화 전)
-const dispSum = dispExp.reduce((a,b)=>a+b,0);
+const dispExp = exps;                           // 표시용 eˣ — 본 계산의 수치안정 값(max 빼기) 재사용
+const dispSum = sumE;
 const palette = ['#60a5fa','#fbbf24','#94a3b8','#34d399'];  // 단어별 색
 
 // 클릭 가능한 점수표

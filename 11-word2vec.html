@@ -221,17 +221,22 @@ VZ.setupStepper();
     const place=(n)=> n===1 ? [midY] : Array.from({length:n},(_,i)=> 40 + i*( (H-80)/(n-1) ));
     const inY=place(inputs.length), outY=place(outputs.length);
     let edges='', nodes='', labels='';
-    // 입력 → 은닉
-    inY.forEach(y=>{ edges += `<line x1="${inX}" y1="${y}" x2="${hidX}" y2="${midY}" stroke="${inColor}" stroke-opacity=".5" stroke-width="1.3"/>`; });
+    // 은닉층은 다차원(예: 300차원) — 여러 노드 + 생략표시로 표현
+    const hidYs=[midY-34, midY-12, midY+10];     // 위 2개 + 아래 1개, 가운데에 ⋮ 생략표시
+    // 입력 → 은닉 (모든 은닉 노드로 연결)
+    inY.forEach(y=>{ hidYs.forEach(hy=>{ edges += `<line x1="${inX}" y1="${y}" x2="${hidX}" y2="${hy}" stroke="${inColor}" stroke-opacity=".35" stroke-width="1.1"/>`; }); });
     // 은닉 → 출력
-    outY.forEach(y=>{ edges += `<line x1="${hidX}" y1="${midY}" x2="${outX}" y2="${y}" stroke="${outColor}" stroke-opacity=".5" stroke-width="1.3"/>`; });
+    outY.forEach(y=>{ hidYs.forEach(hy=>{ edges += `<line x1="${hidX}" y1="${hy}" x2="${outX}" y2="${y}" stroke="${outColor}" stroke-opacity=".35" stroke-width="1.1"/>`; }); });
     inputs.forEach((t,i)=>{
       nodes += `<circle cx="${inX}" cy="${inY[i]}" r="14" fill="rgba(55,189,248,.15)" stroke="${inColor}" stroke-width="1.6"/>`;
       labels += `<text x="${inX}" y="${inY[i]+4}" text-anchor="middle" font-size="9" fill="${inColor}" font-family="JetBrains Mono">${t}</text>`;
     });
-    // 은닉
-    nodes += `<circle cx="${hidX}" cy="${midY}" r="18" fill="rgba(251,191,36,.15)" stroke="var(--hot)" stroke-width="1.8"/>`;
-    labels += `<text x="${hidX}" y="${midY+4}" text-anchor="middle" font-size="9" fill="var(--hot)" font-family="JetBrains Mono">은닉</text>`;
+    // 은닉층 — 다차원임을 노드 여러 개 + ⋮ 로 표시
+    hidYs.forEach(hy=>{
+      nodes += `<circle cx="${hidX}" cy="${hy}" r="11" fill="rgba(251,191,36,.15)" stroke="var(--hot)" stroke-width="1.6"/>`;
+    });
+    labels += `<text x="${hidX}" y="${midY+34}" text-anchor="middle" font-size="13" fill="var(--hot)" font-family="JetBrains Mono">⋮</text>`;
+    labels += `<text x="${hidX}" y="${midY+58}" text-anchor="middle" font-size="8.5" fill="var(--hot)" font-family="JetBrains Mono">h (예: 300차원)</text>`;
     outputs.forEach((t,i)=>{
       nodes += `<circle cx="${outX}" cy="${outY[i]}" r="14" fill="rgba(192,132,252,.15)" stroke="${outColor}" stroke-width="1.6"/>`;
       labels += `<text x="${outX}" y="${outY[i]+4}" text-anchor="middle" font-size="9" fill="${outColor}" font-family="JetBrains Mono">${t}</text>`;
